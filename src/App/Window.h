@@ -9,6 +9,7 @@
 #include <QOpenGLTexture>
 #include <QOpenGLVertexArrayObject>
 
+#include "tiny_gltf.h"
 #include <functional>
 #include <memory>
 
@@ -44,14 +45,18 @@ private:
 private:
 	[[nodiscard]] PerfomanceMetricsGuard captureMetrics();
 
+	void load_model();
+	void bind_model();
+	GLuint generate_and_bind_vbo(int bufferViewIdx);
+	void bind_vbo(int bufferViewIdx, GLuint vbo);
+
+
 signals:
 	void updateUI();
 
 private:
 	GLint mvpUniform_ = -1;
 
-	QOpenGLBuffer vbo_{QOpenGLBuffer::Type::VertexBuffer};
-	QOpenGLBuffer ibo_{QOpenGLBuffer::Type::IndexBuffer};
 	QOpenGLVertexArrayObject vao_;
 
 	QMatrix4x4 model_;
@@ -69,4 +74,8 @@ private:
 	} ui_;
 
 	bool animated_ = true;
+
+	// Model
+	tinygltf::Model gltf_model_;
+	std::vector<std::optional<GLuint>> b2vbo_;
 };

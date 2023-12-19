@@ -71,17 +71,9 @@ void Window::onInit()
 	vao_.create();
 	vao_.bind();
 
-	// Create VBO
-	vbo_.create();
-	vbo_.bind();
-	vbo_.setUsagePattern(QOpenGLBuffer::StaticDraw);
-	vbo_.allocate(vertices.data(), static_cast<int>(vertices.size() * sizeof(GLfloat)));
-
-	// Create IBO
-	ibo_.create();
-	ibo_.bind();
-	ibo_.setUsagePattern(QOpenGLBuffer::StaticDraw);
-	ibo_.allocate(indices.data(), static_cast<int>(indices.size() * sizeof(GLuint)));
+	// Load and bind model
+	load_model();
+	bind_model();
 
 	texture_ = std::make_unique<QOpenGLTexture>(QImage(":/Textures/voronoi.png"));
 	texture_->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
@@ -200,4 +192,111 @@ auto Window::captureMetrics() -> PerfomanceMetricsGuard
 			}
 		}
 	};
+}
+void Window::load_model()
+{
+	auto ctx = tinygltf::TinyGLTF();
+
+	std::string err;
+	std::string warn;
+
+	auto file = QFile(":Models/Cube.glb");
+	auto qBytes = file.readAll();
+	auto bytes = reinterpret_cast<const unsigned char*>(qBytes.constData());
+	auto len = qBytes.length();
+
+	bool res = ctx.LoadBinaryFromMemory(&gltf_model_, &err, &warn, bytes, len);
+
+	if (!res) {
+		qDebug() << "Couldn't load the model";
+		qDebug() << "WARN: " << QString::fromStdString(warn);
+		qDebug() << "ERR:  " << QString::fromStdString(err);
+		throw std::runtime_error("Cannot load model");
+	}
+
+	qDebug() << "Loaded GLTF";
+}
+
+void Window::bind_model()
+{
+	auto scene = gltf_model_.scenes[gltf_model_.defaultScene];
+	b2vbo_.resize(gltf_model_.bufferViews.size());
+
+	for (auto nodeIdx: scene.nodes) {
+		auto& node = gltf_model_.nodes[nodeIdx];
+		if (node.mesh == -1) {
+			continue;  // Node without mesh
+		}
+
+		// Bind meshes
+		auto& mesh = gltf_model_.meshes[node.mesh];
+		for (auto& primitive: mesh.primitives) {
+			for (auto const& [name, accessorIdx]: primitive.attributes) {
+
+				auto accessor = gltf_model_.accessors[accessorIdx];
+				auto bufferViewIdx = accessor.bufferView;
+				auto& vboOpt = b2vbo_[bufferViewIdx];
+				if (!vboOpt) {
+					vboOpt = generate_and_bind_vbo(bufferViewIdx);
+				} else {
+					// VBO was already bound as a part of another node/mesh/primitive
+					continue;
+				}
+
+				int vaa;
+				if (name == "POSITION") vaa = 0;
+				else if (name == "NORMAL") vaa = 1;
+				else if (name == "TEXCOORD_0") vaa = 2;
+				else {
+					qDebug() << "Attribute \"" << QString::fromStdString(name) << "\" was skipped";
+					continue;
+				}
+
+				int size = 1;
+				if (accessor.type == TINYGLTF_TYPE_SCALAR) {
+					size = 1;
+				} else if (accessor.type == TINYGLTF_TYPE_VEC2) {
+					size = 2;
+				} else if (accessor.type == TINYGLTF_TYPE_VEC3) {
+					size = 3;
+				} else if (accessor.type == TINYGLTF_TYPE_VEC4) {
+					size = 4;
+				} else {
+					qDebug() << "Unsupported accessor type: " << accessor.type;
+					throw std::runtime_error("Unsupported accessor type");
+				}
+
+				auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+				int byteStride = accessor.ByteStride(bufferView);
+
+				glEnableVertexAttribArray(vaa);
+				glVertexAttribPointer(vaa, size,
+									  accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE,
+									  byteStride, reinterpret_cast<const void *>(bufferView.byteOffset));
+
+			}
+
+		}
+	}
+
+}
+GLuint Window::generate_and_bind_vbo(int bufferViewIdx)
+{
+	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+	auto& buffer = gltf_model_.buffers[bufferView.buffer];
+
+	GLuint vbo;
+	glGenBuffers(1, &vbo);
+	glBindBuffer(bufferView.target, vbo);
+	glBufferData(bufferView.target,
+				 bufferView.byteLength,
+				 buffer.data.data() + bufferView.byteOffset,
+				 GL_STATIC_DRAW);
+
+	return vbo;
+}
+void Window::bind_vbo(int bufferViewIdx, GLuint vbo)
+{
+	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+	glBindBuffer(bufferView.target, vbo);
 }
