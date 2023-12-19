@@ -100,9 +100,6 @@ void Window::onInit()
 
 	vao_.release();
 
-	ibo_.release();
-	vbo_.release();
-
 	// Еnable depth test and face culling
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
@@ -217,69 +214,95 @@ void Window::load_model()
 	qDebug() << "Loaded GLTF";
 }
 
+void Window::bind_mesh(int meshIdx)
+{
+	auto& mesh = gltf_model_.meshes[meshIdx];
+	for (auto& primitive: mesh.primitives) {
+		for (auto const& [name, accessorIdx]: primitive.attributes) {
+
+			auto accessor = gltf_model_.accessors[accessorIdx];
+			auto bufferViewIdx = accessor.bufferView;
+			auto& vbo = vbos_[bufferViewIdx];
+
+			int vaa;
+			if (name == "POSITION") vaa = 0;
+			else if (name == "NORMAL") vaa = 1;
+			else if (name == "TEXCOORD_0") vaa = 2;
+			else {
+				qDebug() << "Attribute \"" << QString::fromStdString(name) << "\" was skipped";
+				continue;
+			}
+
+			int size = 1;
+			if (accessor.type == TINYGLTF_TYPE_SCALAR) {
+				size = 1;
+			} else if (accessor.type == TINYGLTF_TYPE_VEC2) {
+				size = 2;
+			} else if (accessor.type == TINYGLTF_TYPE_VEC3) {
+				size = 3;
+			} else if (accessor.type == TINYGLTF_TYPE_VEC4) {
+				size = 4;
+			} else {
+				qDebug() << "Unsupported accessor type: " << accessor.type;
+				throw std::runtime_error("Unsupported accessor type");
+			}
+
+			auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+			int byteStride = accessor.ByteStride(bufferView);
+
+			glEnableVertexAttribArray(vaa);
+			glVertexAttribPointer(vaa, size,
+								  accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE,
+								  byteStride, reinterpret_cast<const void *>(bufferView.byteOffset));
+
+		}
+
+	}
+}
+
+void Window::bind_node(int nodeIdx)
+{
+	auto& node = gltf_model_.nodes[nodeIdx];
+	if ((node.mesh >= 0) && (node.mesh <= gltf_model_.meshes.size())) {
+		bind_mesh(node.mesh);
+	}
+
+	for (auto& childIdx: node.children) {
+		bind_node(childIdx);
+	}
+}
+
 void Window::bind_model()
 {
 	auto scene = gltf_model_.scenes[gltf_model_.defaultScene];
-	b2vbo_.resize(gltf_model_.bufferViews.size());
+	vbos_.resize(gltf_model_.bufferViews.size());
 
+	// Generate VBOs
+	glGenBuffers(vbos_.size(), vbos_.data());
+	for (size_t i = 0; i < vbos_.size(); ++i) {
+		auto bufferView = gltf_model_.bufferViews[i];
+		auto vbo = vbos_[i];
+
+		if (bufferView.target == 0) {
+			continue;
+		}
+
+		auto& buffer = gltf_model_.buffers[bufferView.buffer];
+		glBindBuffer(bufferView.target, vbo);
+		glBufferData(bufferView.target,
+					 bufferView.byteLength,
+					 buffer.data.data() + bufferView.byteOffset,
+					 GL_STATIC_DRAW);
+
+	}
+
+	// Bind model's nodes
 	for (auto nodeIdx: scene.nodes) {
-		auto& node = gltf_model_.nodes[nodeIdx];
-		if (node.mesh == -1) {
-			continue;  // Node without mesh
-		}
-
-		// Bind meshes
-		auto& mesh = gltf_model_.meshes[node.mesh];
-		for (auto& primitive: mesh.primitives) {
-			for (auto const& [name, accessorIdx]: primitive.attributes) {
-
-				auto accessor = gltf_model_.accessors[accessorIdx];
-				auto bufferViewIdx = accessor.bufferView;
-				auto& vboOpt = b2vbo_[bufferViewIdx];
-				if (!vboOpt) {
-					vboOpt = generate_and_bind_vbo(bufferViewIdx);
-				} else {
-					// VBO was already bound as a part of another node/mesh/primitive
-					continue;
-				}
-
-				int vaa;
-				if (name == "POSITION") vaa = 0;
-				else if (name == "NORMAL") vaa = 1;
-				else if (name == "TEXCOORD_0") vaa = 2;
-				else {
-					qDebug() << "Attribute \"" << QString::fromStdString(name) << "\" was skipped";
-					continue;
-				}
-
-				int size = 1;
-				if (accessor.type == TINYGLTF_TYPE_SCALAR) {
-					size = 1;
-				} else if (accessor.type == TINYGLTF_TYPE_VEC2) {
-					size = 2;
-				} else if (accessor.type == TINYGLTF_TYPE_VEC3) {
-					size = 3;
-				} else if (accessor.type == TINYGLTF_TYPE_VEC4) {
-					size = 4;
-				} else {
-					qDebug() << "Unsupported accessor type: " << accessor.type;
-					throw std::runtime_error("Unsupported accessor type");
-				}
-
-				auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
-				int byteStride = accessor.ByteStride(bufferView);
-
-				glEnableVertexAttribArray(vaa);
-				glVertexAttribPointer(vaa, size,
-									  accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE,
-									  byteStride, reinterpret_cast<const void *>(bufferView.byteOffset));
-
-			}
-
-		}
+		bind_node(nodeIdx);
 	}
 
 }
+
 GLuint Window::generate_and_bind_vbo(int bufferViewIdx)
 {
 	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
@@ -299,4 +322,35 @@ void Window::bind_vbo(int bufferViewIdx, GLuint vbo)
 {
 	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
 	glBindBuffer(bufferView.target, vbo);
+}
+
+void Window::render_model()
+{
+	const auto& scene = gltf_model_.scenes[gltf_model_.defaultScene];
+	for (auto& nodeIdx: scene.nodes) {
+		render_node(nodeIdx);
+	}
+}
+void Window::render_node(int nodeIdx)
+{
+	auto& node = gltf_model_.nodes[nodeIdx];
+	if ((node.mesh >= 0) && (node.mesh <= gltf_model_.meshes.size())) {
+		render_mesh(node.mesh);
+	}
+
+	for (auto& childIdx: node.children) {
+		render_node(childIdx);
+	}
+}
+void Window::render_mesh(int meshIdx)
+{
+	auto& mesh = gltf_model_.meshes[meshIdx];
+	for (auto& primitive: mesh.primitives) {
+		auto& accessor = gltf_model_.accessors[primitive.indices];
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos_[accessor.bufferView]);
+		glDrawElements(primitive.mode,
+					   accessor.count,
+					   accessor.componentType,
+					   reinterpret_cast<void*>(accessor.byteOffset));
+	}
 }

@@ -47,8 +47,15 @@ private:
 
 	void load_model();
 	void bind_model();
+	void bind_node(int nodeIdx);
+	void bind_mesh(int meshIdx);
+
 	GLuint generate_and_bind_vbo(int bufferViewIdx);
 	void bind_vbo(int bufferViewIdx, GLuint vbo);
+
+	void render_model();
+	void render_node(int nodeIdx);
+	void render_mesh(int meshIdx);
 
 
 signals:
@@ -77,5 +84,5 @@ private:
 
 	// Model
 	tinygltf::Model gltf_model_;
-	std::vector<std::optional<GLuint>> b2vbo_;
+	std::vector<GLuint> vbos_; // Index is index of bufferView
 };
