@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#include <memory>
+
 #include <Base/GLWidget.hpp>
 
 #include <QElapsedTimer>
@@ -10,8 +13,10 @@
 #include <QOpenGLVertexArrayObject>
 
 #include "tiny_gltf.h"
-#include <functional>
-#include <memory>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 
 class Window final : public fgl::GLWidget
 {
@@ -51,7 +56,7 @@ private:
 	void bind_mesh(int meshIdx);
 
 	GLuint generate_and_bind_vbo(int bufferViewIdx);
-	void bind_vbo(int bufferViewIdx, GLuint vbo);
+	void bind_vbo(int bufferViewIdx);
 
 	void render_model();
 	void render_node(int nodeIdx);
@@ -66,9 +71,9 @@ private:
 
 	QOpenGLVertexArrayObject vao_;
 
-	QMatrix4x4 model_;
-	QMatrix4x4 view_;
-	QMatrix4x4 projection_;
+	glm::mat4 model_;
+	glm::mat4 view_;
+	glm::mat4 projection_;
 
 	std::unique_ptr<QOpenGLTexture> texture_;
 	std::unique_ptr<QOpenGLShaderProgram> program_;
@@ -81,6 +86,11 @@ private:
 	} ui_;
 
 	bool animated_ = true;
+
+	// Render params
+	glm::vec3 cameraPos_;
+	glm::vec3 cameraFront_;
+	glm::vec3 cameraUp_;
 
 	// Model
 	tinygltf::Model gltf_model_;

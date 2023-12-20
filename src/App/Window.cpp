@@ -15,17 +15,8 @@
 
 #include <tinygltf/tiny_gltf.h>
 
-namespace
-{
+#define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
-constexpr std::array<GLfloat, 21u> vertices = {
-	0.0f, 0.707f, 1.f, 0.f, 0.f, 0.0f, 0.0f,
-	-0.5f, -0.5f, 0.f, 1.f, 0.f, 0.5f, 1.0f,
-	0.5f, -0.5f, 0.f, 0.f, 1.f, 1.0f, 0.0f,
-};
-constexpr std::array<GLuint, 3u> indices = {0, 1, 2};
-
-}// namespace
 
 Window::Window() noexcept
 {
@@ -75,23 +66,13 @@ void Window::onInit()
 	load_model();
 	bind_model();
 
-	texture_ = std::make_unique<QOpenGLTexture>(QImage(":/Textures/voronoi.png"));
+	// Load texture
+	texture_ = std::make_unique<QOpenGLTexture>(QImage(":/Textures/oxy.png"));
 	texture_->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
 	texture_->setWrapMode(QOpenGLTexture::WrapMode::Repeat);
 
 	// Bind attributes
 	program_->bind();
-
-	program_->enableAttributeArray(0);
-	program_->setAttributeBuffer(0, GL_FLOAT, 0, 2, static_cast<int>(7 * sizeof(GLfloat)));
-
-	program_->enableAttributeArray(1);
-	program_->setAttributeBuffer(1, GL_FLOAT, static_cast<int>(2 * sizeof(GLfloat)), 3,
-								 static_cast<int>(7 * sizeof(GLfloat)));
-
-	program_->enableAttributeArray(2);
-	program_->setAttributeBuffer(2, GL_FLOAT, static_cast<int>(5 * sizeof(GLfloat)), 2,
-								 static_cast<int>(7 * sizeof(GLfloat)));
 
 	mvpUniform_ = program_->uniformLocation("mvp");
 
@@ -106,6 +87,10 @@ void Window::onInit()
 
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	cameraPos_ = glm::vec3(0, 7, 7);
+	cameraFront_ = glm::vec3(0, 0, -4);
+	cameraUp_ = glm::vec3(0, 1, 0);
 }
 
 void Window::onRender()
@@ -116,9 +101,8 @@ void Window::onRender()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Calculate MVP matrix
-	model_.setToIdentity();
-	model_.translate(0, 0, -2);
-	view_.setToIdentity();
+	model_ = glm::mat4(1);
+	view_ = glm::lookAt(cameraPos_, cameraPos_ + cameraFront_, cameraUp_);
 	const auto mvp = projection_ * view_ * model_;
 
 	// Bind VAO and shader program
@@ -126,14 +110,14 @@ void Window::onRender()
 	vao_.bind();
 
 	// Update uniform value
-	program_->setUniformValue(mvpUniform_, mvp);
+	program_->setUniformValue(mvpUniform_, QMatrix4x4(glm::value_ptr(mvp)).transposed());
 
 	// Activate texture unit and bind texture
 	glActiveTexture(GL_TEXTURE0);
 	texture_->bind();
 
 	// Draw
-	glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr);
+	render_model();
 
 	// Release VAO and shader program
 	texture_->release();
@@ -159,8 +143,8 @@ void Window::onResize(const size_t width, const size_t height)
 	const auto zNear = 0.1f;
 	const auto zFar = 100.0f;
 	const auto fov = 60.0f;
-	projection_.setToIdentity();
-	projection_.perspective(fov, aspect, zNear, zFar);
+	projection_ = glm::mat4(1.0f);
+	projection_ = glm::perspective(fov, aspect, zNear, zFar);
 }
 
 Window::PerfomanceMetricsGuard::PerfomanceMetricsGuard(std::function<void()> callback)
@@ -198,6 +182,12 @@ void Window::load_model()
 	std::string warn;
 
 	auto file = QFile(":Models/Cube.glb");
+
+	if (!file.open(QIODevice::ReadOnly)) {
+		qDebug() << "Cannot open file " << file.fileName();
+		throw std::runtime_error("Cannot open model file");
+	}
+
 	auto qBytes = file.readAll();
 	auto bytes = reinterpret_cast<const unsigned char*>(qBytes.constData());
 	auto len = qBytes.length();
@@ -214,6 +204,59 @@ void Window::load_model()
 	qDebug() << "Loaded GLTF";
 }
 
+void Window::bind_model()
+{
+	auto scene = gltf_model_.scenes[gltf_model_.defaultScene];
+	vbos_.resize(gltf_model_.bufferViews.size());
+
+	// Generate VBOs
+	for (size_t i = 0; i < vbos_.size(); ++i) {
+		auto& bufferView = gltf_model_.bufferViews[i];
+		auto& vbo = vbos_[i];
+
+		if (bufferView.target == 0) {
+			qDebug() << "Unsupported target at buffer" << i;
+			continue;
+		}
+
+
+		glGenBuffers(1, &vbo);
+		qDebug() << "Generated buffer for bufferView" << i;
+
+		auto& buffer = gltf_model_.buffers[bufferView.buffer];
+		glBindBuffer(bufferView.target, vbo);
+		glBufferData(bufferView.target,
+					 bufferView.byteLength,
+					 buffer.data.data() + bufferView.byteOffset,
+					 GL_STATIC_DRAW);
+
+	}
+
+	// Bind model's nodes
+	for (auto nodeIdx: scene.nodes) {
+		bind_node(nodeIdx);
+	}
+
+}
+
+void Window::bind_node(int nodeIdx)
+{
+	qDebug() << "Binding node" << nodeIdx;
+
+	auto& node = gltf_model_.nodes[nodeIdx];
+	if ((node.mesh >= 0) && (node.mesh <= gltf_model_.meshes.size())) {
+		qDebug() << "Node" << nodeIdx << " -> Mesh" << node.mesh;
+		bind_mesh(node.mesh);
+	} else {
+		qDebug() << "Node" << nodeIdx << "has no valid mesh";
+	}
+
+	for (auto& childIdx: node.children) {
+		qDebug() << "Node" << childIdx << " is a child of Node" << nodeIdx;
+		bind_node(childIdx);
+	}
+}
+
 void Window::bind_mesh(int meshIdx)
 {
 	auto& mesh = gltf_model_.meshes[meshIdx];
@@ -222,18 +265,18 @@ void Window::bind_mesh(int meshIdx)
 
 			auto accessor = gltf_model_.accessors[accessorIdx];
 			auto bufferViewIdx = accessor.bufferView;
-			auto& vbo = vbos_[bufferViewIdx];
+			bind_vbo(bufferViewIdx);
 
 			int vaa;
 			if (name == "POSITION") vaa = 0;
 			else if (name == "NORMAL") vaa = 1;
 			else if (name == "TEXCOORD_0") vaa = 2;
 			else {
-				qDebug() << "Attribute \"" << QString::fromStdString(name) << "\" was skipped";
+				qDebug() << "Attribute" << QString::fromStdString(name) << "was skipped in mesh" << meshIdx;
 				continue;
 			}
 
-			int size = 1;
+			int size;
 			if (accessor.type == TINYGLTF_TYPE_SCALAR) {
 				size = 1;
 			} else if (accessor.type == TINYGLTF_TYPE_VEC2) {
@@ -253,74 +296,17 @@ void Window::bind_mesh(int meshIdx)
 			glEnableVertexAttribArray(vaa);
 			glVertexAttribPointer(vaa, size,
 								  accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE,
-								  byteStride, reinterpret_cast<const void *>(bufferView.byteOffset));
+								  byteStride, BUFFER_OFFSET(bufferView.byteOffset));
 
 		}
 
 	}
 }
 
-void Window::bind_node(int nodeIdx)
-{
-	auto& node = gltf_model_.nodes[nodeIdx];
-	if ((node.mesh >= 0) && (node.mesh <= gltf_model_.meshes.size())) {
-		bind_mesh(node.mesh);
-	}
-
-	for (auto& childIdx: node.children) {
-		bind_node(childIdx);
-	}
-}
-
-void Window::bind_model()
-{
-	auto scene = gltf_model_.scenes[gltf_model_.defaultScene];
-	vbos_.resize(gltf_model_.bufferViews.size());
-
-	// Generate VBOs
-	glGenBuffers(vbos_.size(), vbos_.data());
-	for (size_t i = 0; i < vbos_.size(); ++i) {
-		auto bufferView = gltf_model_.bufferViews[i];
-		auto vbo = vbos_[i];
-
-		if (bufferView.target == 0) {
-			continue;
-		}
-
-		auto& buffer = gltf_model_.buffers[bufferView.buffer];
-		glBindBuffer(bufferView.target, vbo);
-		glBufferData(bufferView.target,
-					 bufferView.byteLength,
-					 buffer.data.data() + bufferView.byteOffset,
-					 GL_STATIC_DRAW);
-
-	}
-
-	// Bind model's nodes
-	for (auto nodeIdx: scene.nodes) {
-		bind_node(nodeIdx);
-	}
-
-}
-
-GLuint Window::generate_and_bind_vbo(int bufferViewIdx)
+void Window::bind_vbo(int bufferViewIdx)
 {
 	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
-	auto& buffer = gltf_model_.buffers[bufferView.buffer];
-
-	GLuint vbo;
-	glGenBuffers(1, &vbo);
-	glBindBuffer(bufferView.target, vbo);
-	glBufferData(bufferView.target,
-				 bufferView.byteLength,
-				 buffer.data.data() + bufferView.byteOffset,
-				 GL_STATIC_DRAW);
-
-	return vbo;
-}
-void Window::bind_vbo(int bufferViewIdx, GLuint vbo)
-{
-	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+	auto vbo = vbos_[bufferViewIdx];
 	glBindBuffer(bufferView.target, vbo);
 }
 
@@ -351,6 +337,6 @@ void Window::render_mesh(int meshIdx)
 		glDrawElements(primitive.mode,
 					   accessor.count,
 					   accessor.componentType,
-					   reinterpret_cast<void*>(accessor.byteOffset));
+					   BUFFER_OFFSET(accessor.byteOffset));
 	}
 }

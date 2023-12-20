@@ -19,4 +19,5 @@ target_link_libraries(demo-app
         Qt5::Widgets
         FGL::Base
         thirdparty::tinygltf
+        thirdparty::glm
 )
