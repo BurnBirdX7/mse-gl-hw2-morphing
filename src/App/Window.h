@@ -30,6 +30,12 @@ public: // fgl::GLWidget
 	void onRender() override;
 	void onResize(size_t width, size_t height) override;
 
+public: // Controls
+	void mousePressEvent(QMouseEvent* got_event) override;
+	void mouseMoveEvent(QMouseEvent* got_event) override;
+	void mouseReleaseEvent(QMouseEvent* got_event) override;
+	void keyPressEvent(QKeyEvent* got_event) override;
+
 private:
 	class PerfomanceMetricsGuard final
 	{
@@ -51,11 +57,13 @@ private:
 	[[nodiscard]] PerfomanceMetricsGuard captureMetrics();
 
 	void load_model();
+
 	void bind_model();
+	void bind_buffers();
+	void bind_textures();
 	void bind_node(int nodeIdx);
 	void bind_mesh(int meshIdx);
 
-	GLuint generate_and_bind_vbo(int bufferViewIdx);
 	void bind_vbo(int bufferViewIdx);
 
 	void render_model();
@@ -87,12 +95,55 @@ private:
 
 	bool animated_ = true;
 
+	// Controls tracking
+	QPoint mouseTrackStart_;
+	bool mouseTrack_ = false;
+
 	// Render params
-	glm::vec3 cameraPos_;
-	glm::vec3 cameraFront_;
-	glm::vec3 cameraUp_;
+	struct Camera {
+		glm::vec3 eye = {0, 3, 7};
+		glm::vec3 up = {0, 1, 0};
+		glm::vec3 front = {0, 0, 0};
+
+		float yaw = -90.f;
+		float pitch = -10;
+		constexpr static float fow = 45.f;
+
+		constexpr static float rotationSpeed = 0.05f;
+		constexpr static float movementSpeed = 0.2f;
+
+		Camera() {
+			update_rotation(0, 0); // Force front vector update
+		}
+
+		inline void update_position(float deltaForward, float deltaRightward, float deltaUpward) {
+			auto right = glm::normalize(glm::cross(front, up));
+			eye += ((deltaForward * front) + (deltaRightward * right) + (deltaUpward * up)) * movementSpeed;
+		}
+
+		inline glm::vec3 get_target() const {
+			return eye + front;
+		}
+
+		inline void update_rotation(float deltaYaw, float deltaPitch) {
+			yaw += deltaYaw * rotationSpeed;
+			pitch += deltaPitch * rotationSpeed;
+			pitch = std::clamp(pitch, -89.f, +89.f); // Limit pitch to avoid lock
+
+			front = glm::normalize(glm::vec3(
+				cos(glm::radians(yaw) * cos(glm::radians(pitch))), // x = cos(yaw) * cos(pitch)
+				sin(glm::radians(pitch)),									   // y = sin(pitch)
+				sin(glm::radians(yaw) * cos(glm::radians(pitch)))  // z = sin(yaw) * cos(pitch)
+			));
+		}
+
+		[[nodiscard]] inline glm::mat4 get_view() const {
+			return glm::lookAt(eye, get_target(), up);
+		}
+
+	} camera_;
 
 	// Model
-	tinygltf::Model gltf_model_;
+	tinygltf::Model gltfModel_;
 	std::vector<GLuint> vbos_; // Index is index of bufferView
 };

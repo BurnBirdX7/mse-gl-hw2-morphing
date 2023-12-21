@@ -17,6 +17,8 @@
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
+#define MODEL_TO_LOAD ":Models/vert_cube.glb"
+
 
 Window::Window() noexcept
 {
@@ -54,8 +56,7 @@ void Window::onInit()
 	// Configure shaders
 	program_ = std::make_unique<QOpenGLShaderProgram>(this);
 	program_->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/Shaders/diffuse.vs");
-	program_->addShaderFromSourceFile(QOpenGLShader::Fragment,
-									  ":/Shaders/diffuse.fs");
+	program_->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/Shaders/diffuse.fs");
 	program_->link();
 
 	// Create VAO object
@@ -87,10 +88,6 @@ void Window::onInit()
 
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	cameraPos_ = glm::vec3(0, 7, 7);
-	cameraFront_ = glm::vec3(0, 0, -4);
-	cameraUp_ = glm::vec3(0, 1, 0);
 }
 
 void Window::onRender()
@@ -100,16 +97,14 @@ void Window::onRender()
 	// Clear buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// Calculate MVP matrix
-	model_ = glm::mat4(1);
-	view_ = glm::lookAt(cameraPos_, cameraPos_ + cameraFront_, cameraUp_);
-	const auto mvp = projection_ * view_ * model_;
-
 	// Bind VAO and shader program
 	program_->bind();
 	vao_.bind();
 
 	// Update uniform value
+	model_ = glm::mat4(1);
+	view_ = camera_.get_view();
+	const auto mvp = projection_ * view_ * model_;
 	program_->setUniformValue(mvpUniform_, QMatrix4x4(glm::value_ptr(mvp)).transposed());
 
 	// Activate texture unit and bind texture
@@ -117,6 +112,8 @@ void Window::onRender()
 	texture_->bind();
 
 	// Draw
+	glClearColor(0.2, 0.2, 0.2, 1.0);		// background color
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	render_model();
 
 	// Release VAO and shader program
@@ -142,9 +139,8 @@ void Window::onResize(const size_t width, const size_t height)
 	const auto aspect = static_cast<float>(width) / static_cast<float>(height);
 	const auto zNear = 0.1f;
 	const auto zFar = 100.0f;
-	const auto fov = 60.0f;
-	projection_ = glm::mat4(1.0f);
-	projection_ = glm::perspective(fov, aspect, zNear, zFar);
+	const auto fov = Camera::fow;
+	projection_ = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }
 
 Window::PerfomanceMetricsGuard::PerfomanceMetricsGuard(std::function<void()> callback)
@@ -181,7 +177,7 @@ void Window::load_model()
 	std::string err;
 	std::string warn;
 
-	auto file = QFile(":Models/Cube.glb");
+	auto file = QFile(MODEL_TO_LOAD);
 
 	if (!file.open(QIODevice::ReadOnly)) {
 		qDebug() << "Cannot open file " << file.fileName();
@@ -192,7 +188,7 @@ void Window::load_model()
 	auto bytes = reinterpret_cast<const unsigned char*>(qBytes.constData());
 	auto len = qBytes.length();
 
-	bool res = ctx.LoadBinaryFromMemory(&gltf_model_, &err, &warn, bytes, len);
+	bool res = ctx.LoadBinaryFromMemory(&gltfModel_, &err, &warn, bytes, len);
 
 	if (!res) {
 		qDebug() << "Couldn't load the model";
@@ -206,31 +202,11 @@ void Window::load_model()
 
 void Window::bind_model()
 {
-	auto scene = gltf_model_.scenes[gltf_model_.defaultScene];
-	vbos_.resize(gltf_model_.bufferViews.size());
+	auto scene = gltfModel_.scenes[gltfModel_.defaultScene];
+	vbos_.resize(gltfModel_.bufferViews.size());
 
-	// Generate VBOs
-	for (size_t i = 0; i < vbos_.size(); ++i) {
-		auto& bufferView = gltf_model_.bufferViews[i];
-		auto& vbo = vbos_[i];
-
-		if (bufferView.target == 0) {
-			qDebug() << "Unsupported target at buffer" << i;
-			continue;
-		}
-
-
-		glGenBuffers(1, &vbo);
-		qDebug() << "Generated buffer for bufferView" << i;
-
-		auto& buffer = gltf_model_.buffers[bufferView.buffer];
-		glBindBuffer(bufferView.target, vbo);
-		glBufferData(bufferView.target,
-					 bufferView.byteLength,
-					 buffer.data.data() + bufferView.byteOffset,
-					 GL_STATIC_DRAW);
-
-	}
+	bind_buffers();
+	bind_textures();
 
 	// Bind model's nodes
 	for (auto nodeIdx: scene.nodes) {
@@ -239,12 +215,44 @@ void Window::bind_model()
 
 }
 
+void Window::bind_buffers() {
+	// Generate VBOs and bind buffer views to them
+	for (size_t i = 0; i < vbos_.size(); ++i) {
+		auto& bufferView = gltfModel_.bufferViews[i];
+		auto& vbo = vbos_[i];
+
+		auto qname = QString::fromStdString(bufferView.name);
+		qDebug() << "Binding buffer" << i << qname;
+
+		if (bufferView.target == 0) {
+			qDebug() << "Unsupported target at buffer" << i << qname;
+			continue;
+		}
+
+		glGenBuffers(1, &vbo);
+		qDebug() << "Generated buffer for bufferView" << i;
+
+		auto& buffer = gltfModel_.buffers[bufferView.buffer];
+		glBindBuffer(bufferView.target, vbo);
+		glBufferData(bufferView.target,  // Set data
+					 bufferView.byteLength,
+					 buffer.data.data() + bufferView.byteOffset,
+					 GL_STATIC_DRAW);
+
+	}
+}
+
+void Window::bind_textures()
+{
+	// TODO: Bind textures
+}
+
 void Window::bind_node(int nodeIdx)
 {
-	qDebug() << "Binding node" << nodeIdx;
-
-	auto& node = gltf_model_.nodes[nodeIdx];
-	if ((node.mesh >= 0) && (node.mesh <= gltf_model_.meshes.size())) {
+	auto& node = gltfModel_.nodes[nodeIdx];
+	auto qname = QString::fromStdString(node.name);
+	qDebug() << "Binding node" << nodeIdx << qname;
+	if ((node.mesh >= 0) && ((size_t)node.mesh < gltfModel_.meshes.size())) {
 		qDebug() << "Node" << nodeIdx << " -> Mesh" << node.mesh;
 		bind_mesh(node.mesh);
 	} else {
@@ -259,11 +267,12 @@ void Window::bind_node(int nodeIdx)
 
 void Window::bind_mesh(int meshIdx)
 {
-	auto& mesh = gltf_model_.meshes[meshIdx];
+	auto& mesh = gltfModel_.meshes[meshIdx];
+	qDebug() << "Mesh" << meshIdx << QString::fromStdString(mesh.name);
 	for (auto& primitive: mesh.primitives) {
 		for (auto const& [name, accessorIdx]: primitive.attributes) {
 
-			auto accessor = gltf_model_.accessors[accessorIdx];
+			auto accessor = gltfModel_.accessors[accessorIdx];
 			auto bufferViewIdx = accessor.bufferView;
 			bind_vbo(bufferViewIdx);
 
@@ -290,7 +299,7 @@ void Window::bind_mesh(int meshIdx)
 				throw std::runtime_error("Unsupported accessor type");
 			}
 
-			auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+			auto& bufferView = gltfModel_.bufferViews[bufferViewIdx];
 			int byteStride = accessor.ByteStride(bufferView);
 
 			glEnableVertexAttribArray(vaa);
@@ -305,22 +314,22 @@ void Window::bind_mesh(int meshIdx)
 
 void Window::bind_vbo(int bufferViewIdx)
 {
-	auto& bufferView = gltf_model_.bufferViews[bufferViewIdx];
+	auto& bufferView = gltfModel_.bufferViews[bufferViewIdx];
 	auto vbo = vbos_[bufferViewIdx];
 	glBindBuffer(bufferView.target, vbo);
 }
 
 void Window::render_model()
 {
-	const auto& scene = gltf_model_.scenes[gltf_model_.defaultScene];
+	const auto& scene = gltfModel_.scenes[gltfModel_.defaultScene];
 	for (auto& nodeIdx: scene.nodes) {
 		render_node(nodeIdx);
 	}
 }
 void Window::render_node(int nodeIdx)
 {
-	auto& node = gltf_model_.nodes[nodeIdx];
-	if ((node.mesh >= 0) && (node.mesh <= gltf_model_.meshes.size())) {
+	auto& node = gltfModel_.nodes[nodeIdx];
+	if ((node.mesh >= 0) && (node.mesh <= gltfModel_.meshes.size())) {
 		render_mesh(node.mesh);
 	}
 
@@ -330,13 +339,54 @@ void Window::render_node(int nodeIdx)
 }
 void Window::render_mesh(int meshIdx)
 {
-	auto& mesh = gltf_model_.meshes[meshIdx];
+	auto& mesh = gltfModel_.meshes[meshIdx];
 	for (auto& primitive: mesh.primitives) {
-		auto& accessor = gltf_model_.accessors[primitive.indices];
+		auto& accessor = gltfModel_.accessors[primitive.indices];
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos_[accessor.bufferView]);
 		glDrawElements(primitive.mode,
 					   accessor.count,
 					   accessor.componentType,
 					   BUFFER_OFFSET(accessor.byteOffset));
 	}
+}
+void Window::mousePressEvent(QMouseEvent* got_event)
+{
+	mouseTrack_ = true;
+	mouseTrackStart_ = got_event->pos();
+}
+void Window::mouseMoveEvent(QMouseEvent* got_event)
+{
+	if (!mouseTrack_) {
+		return;
+	}
+
+	auto pos = got_event->pos();
+	auto deltaX = mouseTrackStart_.x() - pos.x();
+	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
+	mouseTrackStart_ = pos;
+	camera_.update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
+	update();
+
+}
+void Window::mouseReleaseEvent(QMouseEvent* got_event)
+{
+	mouseTrack_ = false;
+}
+
+void Window::keyPressEvent(QKeyEvent * got_event) {
+	auto key = got_event->key();
+
+	static std::map<Qt::Key, glm::vec3> keymap = {
+		{Qt::Key_W, {1, 0, 0}},
+		{Qt::Key_S, {-1, 0, 0}},
+		{Qt::Key_A, {0, 0, -1}},
+		{Qt::Key_D, {0, 0, 1}},
+		{Qt::Key_Space, {0, 1, 0}},
+		{Qt::Key_Control, {0, -1, 0}},
+	};
+
+	auto delta = keymap[(Qt::Key)key];
+	camera_.update_position(delta.x, delta.z, delta.y);
+
+	update();
 }
