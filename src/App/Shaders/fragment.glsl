@@ -6,18 +6,15 @@ in vec3 fragNormal;
 in vec2 fragTex;
 in vec3 fragPos;
 in vec3 fragDirectionalLightSource;
+in vec3 fragSpotLightDirection;
 
 out vec4 outCol;
 
 void main() {
-    vec4 directional = vec4(0); // Default value
+    vec4 tex = texture(tex_2d, fragTex);
 
-    float cos = dot(fragNormal, fragDirectionalLightSource);
-    if (cos > 0.0) {
-        directional = texture(tex_2d, fragTex) * cos;
-    } else {
-        directional = vec4(0);
-    }
+    float ambient = 0.2;
+    float directional = max(dot(fragNormal, fragDirectionalLightSource), 0);
 
-    outCol = texture(tex_2d, fragTex) * 0.8 + directional;
+    outCol = (ambient + directional) * tex;
 }
