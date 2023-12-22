@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>Models/chess.glb</file>
         <file>Models/Cube.glb</file>
+        <file>Models/Cube2.glb</file>
         <file>Models/vert_cube.glb</file>
     </qresource>
     <qresource prefix="/">
