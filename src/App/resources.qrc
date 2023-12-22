@@ -11,5 +11,7 @@
     <qresource prefix="/">
         <file>Shaders/diffuse.fs</file>
         <file>Shaders/diffuse.vs</file>
+        <file>Shaders/fragment.glsl</file>
+        <file>Shaders/vertex.glsl</file>
     </qresource>
 </RCC>

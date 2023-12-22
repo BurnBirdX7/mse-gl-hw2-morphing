@@ -17,7 +17,7 @@
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
-#define MODEL_TO_LOAD ":Models/vert_cube.glb"
+const QString MODEL_TO_LOAD = ":Models/Cube.glb";
 
 
 Window::Window() noexcept
@@ -55,8 +55,8 @@ void Window::onInit()
 {
 	// Configure shaders
 	program_ = std::make_unique<QOpenGLShaderProgram>(this);
-	program_->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/Shaders/diffuse.vs");
-	program_->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/Shaders/diffuse.fs");
+	program_->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/Shaders/vertex.glsl");
+	program_->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/Shaders/fragment.glsl");
 	program_->link();
 
 	// Create VAO object
@@ -75,7 +75,10 @@ void Window::onInit()
 	// Bind attributes
 	program_->bind();
 
-	mvpUniform_ = program_->uniformLocation("mvp");
+	uniforms_.mvp = program_->uniformLocation("mvp");
+	uniforms_.model = program_->uniformLocation("modelMat");
+	uniforms_.view = program_->uniformLocation("viewMat");
+	uniforms_.normal = program_->uniformLocation("normalMat");
 
 	// Release all
 	program_->release();
@@ -88,6 +91,8 @@ void Window::onInit()
 
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	model_ = glm::rotate(glm::mat4(1), glm::radians(45.f), glm::vec3(0, 1, 0));
 }
 
 void Window::onRender()
@@ -101,20 +106,16 @@ void Window::onRender()
 	program_->bind();
 	vao_.bind();
 
-	// Update uniform value
-	model_ = glm::mat4(1);
-	view_ = camera_.get_view();
-	const auto mvp = projection_ * view_ * model_;
-	program_->setUniformValue(mvpUniform_, QMatrix4x4(glm::value_ptr(mvp)).transposed());
+	// Clear screen
+	glClearColor(0.2, 0.2, 0.2, 1.0);		// background color
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Activate texture unit and bind texture
 	glActiveTexture(GL_TEXTURE0);
 	texture_->bind();
 
-	// Draw
-	glClearColor(0.2, 0.2, 0.2, 1.0);		// background color
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	render_model();
+	// Render
+	render();
 
 	// Release VAO and shader program
 	texture_->release();
@@ -122,6 +123,11 @@ void Window::onRender()
 	program_->release();
 
 	++frameCount_;
+
+	GLenum error = glGetError();
+	if (error != GL_NO_ERROR) {
+		qDebug() << "OpenGL Error: " << error;
+	}
 
 	// Request redraw if animated
 	if (animated_)
@@ -217,9 +223,8 @@ void Window::bind_model()
 
 void Window::bind_buffers() {
 	// Generate VBOs and bind buffer views to them
-	for (size_t i = 0; i < vbos_.size(); ++i) {
+	for (size_t i = 0; i < gltfModel_.bufferViews.size(); ++i) {
 		auto& bufferView = gltfModel_.bufferViews[i];
-		auto& vbo = vbos_[i];
 
 		auto qname = QString::fromStdString(bufferView.name);
 		qDebug() << "Binding buffer" << i << qname;
@@ -229,9 +234,11 @@ void Window::bind_buffers() {
 			continue;
 		}
 
-		glGenBuffers(1, &vbo);
+		auto& vbo = vbos_[i];  // There's already place for the VBO in the container
+		glGenBuffers(1, &vbo);   // Generate buffer, and store its ID in the container
 		qDebug() << "Generated buffer for bufferView" << i;
 
+		// Associate data with the buffer:
 		auto& buffer = gltfModel_.buffers[bufferView.buffer];
 		glBindBuffer(bufferView.target, vbo);
 		glBufferData(bufferView.target,  // Set data
@@ -271,10 +278,9 @@ void Window::bind_mesh(int meshIdx)
 	qDebug() << "Mesh" << meshIdx << QString::fromStdString(mesh.name);
 	for (auto& primitive: mesh.primitives) {
 		for (auto const& [name, accessorIdx]: primitive.attributes) {
-
 			auto accessor = gltfModel_.accessors[accessorIdx];
 			auto bufferViewIdx = accessor.bufferView;
-			bind_vbo(bufferViewIdx);
+			glBindBuffer(GL_ARRAY_BUFFER, vbos_[bufferViewIdx]);
 
 			int vaa;
 			if (name == "POSITION") vaa = 0;
@@ -305,18 +311,14 @@ void Window::bind_mesh(int meshIdx)
 			glEnableVertexAttribArray(vaa);
 			glVertexAttribPointer(vaa, size,
 								  accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE,
-								  byteStride, BUFFER_OFFSET(bufferView.byteOffset));
+								  byteStride, BUFFER_OFFSET(accessor.byteOffset));
 
+			qDebug() << "Bound mesh" << meshIdx << "vaa" << vaa << "size" << size
+					 << "bufferView" << bufferViewIdx << "Offset" << bufferView.byteOffset
+					 << "Stride" << byteStride << "Component type" << accessor.componentType;
 		}
 
 	}
-}
-
-void Window::bind_vbo(int bufferViewIdx)
-{
-	auto& bufferView = gltfModel_.bufferViews[bufferViewIdx];
-	auto vbo = vbos_[bufferViewIdx];
-	glBindBuffer(bufferView.target, vbo);
 }
 
 void Window::render_model()
@@ -389,4 +391,23 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 	camera_.update_position(delta.x, delta.z, delta.y);
 
 	update();
+}
+void Window::render()
+{
+	// Update view matrix
+	view_ = camera_.get_view();
+	const auto mvp = projection_ * view_ * model_;
+
+	// Update model matrix -- skip
+	// Update normal matrix:
+	auto normalMat = glm::inverse(model_);
+
+	// Set uniforms:
+	program_->setUniformValue(uniforms_.model, QMatrix4x4(glm::value_ptr(model_)).transposed());
+	program_->setUniformValue(uniforms_.view, QMatrix4x4(glm::value_ptr(view_)).transposed());
+	program_->setUniformValue(uniforms_.normal, QMatrix4x4(glm::value_ptr(normalMat)));
+	program_->setUniformValue(uniforms_.mvp, QMatrix4x4(glm::value_ptr(mvp)).transposed());
+
+	// Render model:
+	render_model();
 }

@@ -66,16 +66,24 @@ private:
 
 	void bind_vbo(int bufferViewIdx);
 
+	void render();
 	void render_model();
 	void render_node(int nodeIdx);
 	void render_mesh(int meshIdx);
+
 
 
 signals:
 	void updateUI();
 
 private:
-	GLint mvpUniform_ = -1;
+	struct {
+		// Matrices
+		GLint mvp = -1;
+		GLint model = -1;
+		GLint view = -1;
+		GLint normal = -1;
+	} uniforms_;
 
 	QOpenGLVertexArrayObject vao_;
 
@@ -101,12 +109,12 @@ private:
 
 	// Render params
 	struct Camera {
-		glm::vec3 eye = {0, 3, 7};
+		glm::vec3 eye = {0, 2, 7};
 		glm::vec3 up = {0, 1, 0};
 		glm::vec3 front = {0, 0, 0};
 
 		float yaw = -90.f;
-		float pitch = -10;
+		float pitch = -13.6;
 		constexpr static float fow = 45.f;
 
 		constexpr static float rotationSpeed = 0.05f;

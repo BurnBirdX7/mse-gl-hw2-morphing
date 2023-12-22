@@ -2,11 +2,6 @@ set(SRCS
     main.cpp
     Window.cpp
     Window.h
-
-    Shaders/diffuse.fs
-    Shaders/diffuse.vs
-    Textures/voronoi.png
-
     resources.qrc
 )
 
