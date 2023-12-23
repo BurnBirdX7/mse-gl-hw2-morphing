@@ -477,6 +477,11 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 		{Qt::Key_C, {0, -1, 0}},
 	};
 
+	if (!keymap.contains((Qt::Key)key)) {
+		qDebug() << "Map does not contain pressed key...." << key << got_event->text();
+		return;
+	}
+
 	auto delta = keymap[(Qt::Key)key];
 	currentCamera_->update_position(delta.x, delta.z, delta.y);
 

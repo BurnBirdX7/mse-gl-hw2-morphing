@@ -26,9 +26,9 @@ void main() {
 	vec3 normal = mix(vertNormal, normalize(vertVertex), sphereMorph);
 
 	// Output:
-	fragPos = vec3(modelMat * vertex); 	 				  // World position
-	fragNormal = normalize(mat3(normalMat) * normal); // World normals
-	fragTex = vertTex;									  // Texture coordinates
+	fragPos = vec3(modelMat * vertex);
+	fragNormal = normalize(mat3(normalMat) * normal);
+	fragTex = vertTex;
 
 	// Spot light
 	fragSpotLightDirection = normalize(mat3(viewMat) * (spotLightDirection - spotLightSource));

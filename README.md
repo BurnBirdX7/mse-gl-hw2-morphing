@@ -15,6 +15,8 @@
  * `X`/`C` - move up / down
  * Drag mouse to rotate camera
 
+**Keyboard layout matters!**
+
 ## Purposes
 
 Help students with their submission is the main goal of this repository. Do not use this code in production!!!
