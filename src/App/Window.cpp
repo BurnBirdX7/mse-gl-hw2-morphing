@@ -73,9 +73,24 @@ Window::Window() noexcept
 	freecamCheckbox->setChecked(false);
 	freecamCheckbox->setText("Free Camera");
 
-	layout->addWidget(freecamCheckbox);
+	layout->addWidget(freecamCheckbox, 1);
 
 	connect(freecamCheckbox, &QCheckBox::stateChanged, this, &Window::changeCameraType);
+
+	auto relativeUpCheckbox = new QCheckBox();
+	relativeUpCheckbox->setChecked(false);
+	relativeUpCheckbox->setEnabled(false);
+	relativeUpCheckbox->setText("Use relative up");
+
+	layout->addWidget(relativeUpCheckbox, 2);
+
+	connect(freecamCheckbox, &QCheckBox::stateChanged, relativeUpCheckbox, &QCheckBox::setEnabled);
+	connect(relativeUpCheckbox, &QCheckBox::stateChanged, this, &Window::realtiveUp);
+
+	/* CAMERTA STATS */
+	cameraStats_ = new QLabel();
+	cameraStats_->setText(currentCamera_->get_stats());
+	layout->addWidget(cameraStats_);
 
 	/* misc */
 	timer_.start();
@@ -154,8 +169,9 @@ void Window::onRender()
 	// Render
 	render();
 
+	cameraStats_->setText(currentCamera_->get_stats());
+
 	// Release VAO and shader program
-//	texture_->release();
 	vao_.release();
 	program_->release();
 
@@ -455,8 +471,8 @@ void Window::mouseMoveEvent(QMouseEvent* got_event)
 	auto pos = got_event->pos();
 	auto deltaX = mouseTrackStart_.x() - pos.x();
 	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
-	mouseTrackStart_ = pos;
 	currentCamera_->update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
+	mouseTrackStart_ = pos;
 	update();
 
 }
@@ -466,7 +482,7 @@ void Window::mouseReleaseEvent(QMouseEvent* got_event)
 }
 
 void Window::keyPressEvent(QKeyEvent * got_event) {
-	auto key = got_event->key();
+	auto key = (Qt::Key)got_event->key();
 
 	static std::map<Qt::Key, glm::vec3> keymap = {
 		{Qt::Key_W, {1, 0, 0}},
@@ -477,12 +493,12 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 		{Qt::Key_C, {0, -1, 0}},
 	};
 
-	if (!keymap.contains((Qt::Key)key)) {
+	if (!keymap.contains(key)) {
 		qDebug() << "Map does not contain pressed key...." << key << got_event->text();
 		return;
 	}
 
-	auto delta = keymap[(Qt::Key)key];
+	auto delta = keymap[key];
 	currentCamera_->update_position(delta.x, delta.z, delta.y);
 
 	update();
@@ -556,4 +572,8 @@ void Window::switchSpotLight(bool enable)
 void Window::morph(int val)
 {
 	morph_ = static_cast<float>(val) / 100.f;
+}
+void Window::realtiveUp(bool val)
+{
+	freeCamera_.relativeUp = val;
 }

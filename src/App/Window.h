@@ -11,6 +11,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLTexture>
 #include <QOpenGLVertexArrayObject>
+#include <QLabel>
 
 #include "tiny_gltf.h"
 #include <glm/glm.hpp>
@@ -43,6 +44,7 @@ public slots:
 	void switchDiffuseLight(bool);
 	void switchSpotLight(bool);
 	void morph(int);
+	void realtiveUp(bool);
 
 private:
 	class PerfomanceMetricsGuard final
@@ -119,6 +121,7 @@ private:
 	FreeCamera freeCamera_{};
 	RotatingCamera rotatingCamera_{};
 	AbstractCamera* currentCamera_ = &rotatingCamera_;
+	QLabel* cameraStats_;
 
 	// Model
 	tinygltf::Model gltfModel_;
@@ -129,5 +132,6 @@ private:
 	float morph_ = 0;
 	bool enableDiffuse_ = false;
 	bool enableSpot_ = false;
+	bool relativeUp_ = false;
 
 };
