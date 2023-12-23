@@ -2,6 +2,19 @@
 
 # ITMO MSE OpenGL homework #2 - Morphing
 
+## Controls
+
+### Centered Camera
+
+ * `A`/`D` - rotate camera around model
+ * `W`/`S` - change camera pitch
+ * `X`/`C` - zoom out / zoom in
+
+### Free Camera
+ * `WASD` - Default movement
+ * `X`/`C` - move up / down
+ * Drag mouse to rotate camera
+
 ## Purposes
 
 Help students with their submission is the main goal of this repository. Do not use this code in production!!!

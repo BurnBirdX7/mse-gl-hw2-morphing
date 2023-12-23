@@ -54,8 +54,8 @@ struct FreeCamera : AbstractCamera {
 };
 
 struct RotatingCamera : AbstractCamera {
-	float radius = 7.0f;
-	float theta = 60.0f;
+	float radius = 6.0f;
+	float theta = 75.0f;
 	float phi = 0.0f;
 	glm::vec3 eye{};
 

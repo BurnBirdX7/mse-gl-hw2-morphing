@@ -473,8 +473,8 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 		{Qt::Key_S, {-1, 0, 0}},
 		{Qt::Key_A, {0, 0, -1}},
 		{Qt::Key_D, {0, 0, 1}},
-		{Qt::Key_Space, {0, 1, 0}},
-		{Qt::Key_X, {0, -1, 0}},
+		{Qt::Key_X, {0, 1, 0}},
+		{Qt::Key_C, {0, -1, 0}},
 	};
 
 	auto delta = keymap[(Qt::Key)key];
@@ -514,7 +514,8 @@ void Window::changeCameraType(bool free)
 		freeCamera_.pitch = std::fabs( rotatingCamera_.theta) - 90;
 
 		// Update yaw
-		freeCamera_.yaw = -glm::sign(rotatingCamera_.phi) * (180 - std::abs(rotatingCamera_.phi));
+		float sign = rotatingCamera_.phi > 0 ? 1 : -1;
+		freeCamera_.yaw = -sign * (180 - std::abs(rotatingCamera_.phi));
 
 		// misc
 		freeCamera_.update_rotation(0, 0); // Force update front_ vec
