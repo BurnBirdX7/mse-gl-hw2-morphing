@@ -86,7 +86,8 @@ void Window::onInit()
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	model_ = glm::rotate(glm::mat4(1), glm::radians(-45.f), glm::vec3(0, 1, 0));
+//	model_ = glm::rotate(glm::mat4(1), glm::radians(-45.f), glm::vec3(0, 1, 0));
+	model_ = glm::mat4(1);
 }
 
 void Window::onRender()
@@ -412,7 +413,7 @@ void Window::mouseMoveEvent(QMouseEvent* got_event)
 	auto deltaX = mouseTrackStart_.x() - pos.x();
 	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
 	mouseTrackStart_ = pos;
-	camera_.update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
+	rotatingCamera_.update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
 	update();
 
 }
@@ -430,18 +431,18 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 		{Qt::Key_A, {0, 0, -1}},
 		{Qt::Key_D, {0, 0, 1}},
 		{Qt::Key_Space, {0, 1, 0}},
-		{Qt::Key_Control, {0, -1, 0}},
+		{Qt::Key_X, {0, -1, 0}},
 	};
 
 	auto delta = keymap[(Qt::Key)key];
-	camera_.update_position(delta.x, delta.z, delta.y);
+	rotatingCamera_.update_position(delta.x, delta.z, delta.y);
 
 	update();
 }
 void Window::render()
 {
 	// Update view matrix
-	view_ = camera_.get_view();
+	view_ = rotatingCamera_.get_view();
 	const auto mvp = projection_ * view_ * model_;
 
 	// Update model matrix -- skip

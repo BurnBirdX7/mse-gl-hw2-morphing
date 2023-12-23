@@ -150,6 +150,45 @@ private:
 
 	} camera_;
 
+	struct RotatingCamera {
+		float radius = 7.0f;
+		float theta = 45.0f;
+		float phi = 60.0f;
+		glm::vec3 eye{};
+
+		RotatingCamera() {
+			update_position(0, 0, 0);
+		}
+
+		constexpr static float rotationSpeed = 1.0f;
+		constexpr static float movementSpeed = 0.2f;
+
+		inline void update_rotation(float, float) {
+			// Ignore
+		}
+
+		inline void update_position(float deltaForward, float deltaRightward, float deltaUpward) {
+			radius += deltaUpward * movementSpeed;
+			phi -= deltaRightward * rotationSpeed;
+			theta -= deltaForward * rotationSpeed;
+			theta = std::clamp(theta, 0.001f, 179.999f);
+
+			eye = radius * glm::vec3(
+				glm::sin(glm::radians(theta)) * glm::cos(glm::radians(phi)),
+				glm::cos(glm::radians(theta)),
+			    glm::sin(glm::radians(theta)) * glm::sin(glm::radians(phi))
+			);
+
+			qDebug() << "Phi:" << phi << "Theta:" << theta;
+		}
+
+
+		[[nodiscard]] inline glm::mat4 get_view() const {
+			return glm::lookAt(eye, -glm::normalize(eye), glm::vec3(0, 1, 0));
+		}
+
+	} rotatingCamera_;
+
 	// Model
 	tinygltf::Model gltfModel_;
 	std::vector<GLuint> vbos_; // Index is index of bufferView
