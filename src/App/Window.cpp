@@ -1,11 +1,11 @@
 #include "Window.h"
 
-#include <QMouseEvent>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
-#include <QVBoxLayout>
 #include <QScreen>
+#include <QVBoxLayout>
 
 #include <array>
 
@@ -145,7 +145,7 @@ void Window::onInit()
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-//	model_ = glm::rotate(glm::mat4(1), glm::radians(-45.f), glm::vec3(0, 1, 0));
+	//	model_ = glm::rotate(glm::mat4(1), glm::radians(-45.f), glm::vec3(0, 1, 0));
 	model_ = glm::mat4(1);
 }
 
@@ -161,7 +161,7 @@ void Window::onRender()
 	vao_.bind();
 
 	// Clear screen
-	glClearColor(0.2, 0.2, 0.2, 1.0);		// background color
+	glClearColor(0.2, 0.2, 0.2, 1.0);// background color
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Activate texture unit and bind texture
@@ -179,7 +179,8 @@ void Window::onRender()
 	++frameCount_;
 
 	GLenum error = glGetError();
-	if (error != GL_NO_ERROR) {
+	if (error != GL_NO_ERROR)
+	{
 		qDebug() << "OpenGL Error: " << error;
 	}
 
@@ -203,31 +204,34 @@ void Window::onResize(const size_t width, const size_t height)
 	projection_ = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }
 
-void Window::mousePressEvent(QMouseEvent* got_event)
+void Window::mousePressEvent(QMouseEvent * got_event)
 {
 	mouseTrack_ = true;
 	mouseTrackStart_ = got_event->pos();
 }
-void Window::mouseMoveEvent(QMouseEvent* got_event)
+
+void Window::mouseMoveEvent(QMouseEvent * got_event)
 {
-	if (!mouseTrack_) {
+	if (!mouseTrack_)
+	{
 		return;
 	}
 
 	auto pos = got_event->pos();
 	auto deltaX = mouseTrackStart_.x() - pos.x();
-	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
+	auto deltaY = pos.y() - mouseTrackStart_.y();// Inverted Y
 	currentCamera_->updateRotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
 	mouseTrackStart_ = pos;
 	update();
-
 }
-void Window::mouseReleaseEvent(QMouseEvent* /* ignore */)
+
+void Window::mouseReleaseEvent(QMouseEvent * /* ignore */)
 {
 	mouseTrack_ = false;
 }
 
-void Window::keyPressEvent(QKeyEvent * got_event) {
+void Window::keyPressEvent(QKeyEvent * got_event)
+{
 	auto key = (Qt::Key)got_event->key();
 
 	static std::map<Qt::Key, glm::vec3> keymap = {
@@ -239,7 +243,8 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 		{Qt::Key_C, {0, -1, 0}},
 	};
 
-	if (!keymap.contains(key)) {
+	if (!keymap.contains(key))
+	{
 		qDebug() << "Map does not contain pressed key...." << key << got_event->text();
 		return;
 	}
@@ -252,21 +257,24 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 
 void Window::changeCameraType(bool free)
 {
-	if (free) {
+	if (free)
+	{
 		// Update eye_
 		freeCamera_.eye_ = rotatingCamera_.eye_;
 
 		// Update pitch_
-		freeCamera_.pitch_ = std::fabs( rotatingCamera_.theta_) - 90;
+		freeCamera_.pitch_ = std::fabs(rotatingCamera_.theta_) - 90;
 
 		// Update yaw_
 		float sign = rotatingCamera_.phi_ > 0 ? 1 : -1;
 		freeCamera_.yaw_ = -sign * (180 - std::abs(rotatingCamera_.phi_));
 
 		// misc
-		freeCamera_.updateRotation(0, 0); // Force update front_ vec
+		freeCamera_.updateRotation(0, 0);// Force update front_ vec
 		currentCamera_ = &freeCamera_;
-	} else {
+	}
+	else
+	{
 		auto eye = freeCamera_.eye_;
 
 		auto len = glm::length(eye);
@@ -304,12 +312,13 @@ void Window::relativeUp(bool val)
 }
 
 Window::PerfomanceMetricsGuard::PerfomanceMetricsGuard(std::function<void()> callback)
-	: callback_{ std::move(callback) }
+	: callback_{std::move(callback)}
 {}
 
 Window::PerfomanceMetricsGuard::~PerfomanceMetricsGuard()
 {
-	if (callback_) {
+	if (callback_)
+	{
 		callback_();
 	}
 }
@@ -325,8 +334,7 @@ auto Window::captureMetrics() -> PerfomanceMetricsGuard
 				frameCount_ = 0;
 				emit updateUI();
 			}
-		}
-	};
+		}};
 }
 
 void Window::gltfLoadModel()
@@ -338,18 +346,20 @@ void Window::gltfLoadModel()
 
 	auto file = QFile(MODEL_TO_LOAD);
 
-	if (!file.open(QIODevice::ReadOnly)) {
+	if (!file.open(QIODevice::ReadOnly))
+	{
 		qDebug() << "Cannot open file " << file.fileName();
 		throw std::runtime_error("Cannot open model file");
 	}
 
 	auto qBytes = file.readAll();
-	auto bytes = reinterpret_cast<const unsigned char*>(qBytes.constData());
+	auto bytes = reinterpret_cast<const unsigned char *>(qBytes.constData());
 	auto len = qBytes.length();
 
 	bool res = ctx.LoadBinaryFromMemory(&gltfModel_, &err, &warn, bytes, len);
 
-	if (!res) {
+	if (!res)
+	{
 		qDebug() << "Couldn't load the model";
 		qDebug() << "WARN: " << QString::fromStdString(warn);
 		qDebug() << "ERR:  " << QString::fromStdString(err);
@@ -368,37 +378,39 @@ void Window::gltfBindModel()
 	gltfBindTextures();
 
 	// Bind model's nodes
-	for (auto nodeIdx: scene.nodes) {
+	for (auto nodeIdx: scene.nodes)
+	{
 		gltfBindNode(nodeIdx);
 	}
-
 }
 
-void Window::gltfBindBuffers() {
+void Window::gltfBindBuffers()
+{
 	// Generate VBOs and bind buffer views to them
-	for (size_t i = 0; i < gltfModel_.bufferViews.size(); ++i) {
-		auto& bufferView = gltfModel_.bufferViews[i];
+	for (size_t i = 0; i < gltfModel_.bufferViews.size(); ++i)
+	{
+		auto & bufferView = gltfModel_.bufferViews[i];
 
 		auto qname = QString::fromStdString(bufferView.name);
 		qDebug() << "Binding buffer" << i << qname;
 
-		if (bufferView.target == 0) {
+		if (bufferView.target == 0)
+		{
 			qDebug() << "Unsupported target at buffer" << i << qname;
 			continue;
 		}
 
-		auto& vbo = vbos_[i];  // There's already place for the VBO in the container
-		glGenBuffers(1, &vbo);   // Generate buffer, and store its ID in the container
+		auto & vbo = vbos_[i];// There's already place for the VBO in the container
+		glGenBuffers(1, &vbo);// Generate buffer, and store its ID in the container
 		qDebug() << "Generated buffer for bufferView" << i;
 
 		// Associate data with the buffer:
-		auto& buffer = gltfModel_.buffers[bufferView.buffer];
+		auto & buffer = gltfModel_.buffers[bufferView.buffer];
 		glBindBuffer(bufferView.target, vbo);
-		glBufferData(bufferView.target,  // Set data
+		glBufferData(bufferView.target,// Set data
 					 bufferView.byteLength,
 					 buffer.data.data() + bufferView.byteOffset,
 					 GL_STATIC_DRAW);
-
 	}
 }
 
@@ -406,27 +418,34 @@ void Window::gltfBindTextures()
 {
 	textures_.resize(gltfModel_.textures.size());
 
-	for (size_t i = 0; i < gltfModel_.textures.size(); ++i) {
-		auto& texture = gltfModel_.textures[i];
+	for (size_t i = 0; i < gltfModel_.textures.size(); ++i)
+	{
+		auto & texture = gltfModel_.textures[i];
 		qDebug() << "Binding texture" << i << QString::fromStdString(texture.name);
 
-		if (texture.source < 0 || texture.source >= gltfModel_.images.size()) {
+		if (texture.source < 0 || texture.source >= gltfModel_.images.size())
+		{
 			qDebug() << "Invalid source, skipping...";
 			continue;
 		}
 
 
-		auto& image = gltfModel_.images[texture.source];
+		auto & image = gltfModel_.images[texture.source];
 		auto bufferViewIdx = image.bufferView;
 		qDebug() << "Image" << texture.source << QString::fromStdString(image.name) << "with buffer view" << bufferViewIdx;
 
 
 		int format;
-		if (image.component == 4) {
+		if (image.component == 4)
+		{
 			format = GL_RGBA;
-		} else if (image.component == 3) {
+		}
+		else if (image.component == 3)
+		{
 			format = GL_RGB;
-		} else {
+		}
+		else
+		{
 			qDebug() << "Unexpected component count" << image.component << "skipping...";
 			continue;
 		}
@@ -447,17 +466,21 @@ void Window::gltfBindTextures()
 
 void Window::gltfBindNode(int nodeIdx)
 {
-	auto& node = gltfModel_.nodes[nodeIdx];
+	auto & node = gltfModel_.nodes[nodeIdx];
 	auto qname = QString::fromStdString(node.name);
 	qDebug() << "Binding node" << nodeIdx << qname;
-	if ((node.mesh >= 0) && ((size_t)node.mesh < gltfModel_.meshes.size())) {
+	if ((node.mesh >= 0) && ((size_t)node.mesh < gltfModel_.meshes.size()))
+	{
 		qDebug() << "Node" << nodeIdx << " -> Mesh" << node.mesh;
 		gltfBindMesh(node.mesh);
-	} else {
+	}
+	else
+	{
 		qDebug() << "Node" << nodeIdx << "has no valid mesh (" << node.mesh << ")";
 	}
 
-	for (auto& childIdx: node.children) {
+	for (auto & childIdx: node.children)
+	{
 		qDebug() << "Node" << childIdx << " is a child of Node" << nodeIdx;
 		gltfBindNode(childIdx);
 	}
@@ -465,38 +488,53 @@ void Window::gltfBindNode(int nodeIdx)
 
 void Window::gltfBindMesh(int meshIdx)
 {
-	auto& mesh = gltfModel_.meshes[meshIdx];
+	auto & mesh = gltfModel_.meshes[meshIdx];
 	qDebug() << "Mesh" << meshIdx << QString::fromStdString(mesh.name);
-	for (auto& primitive: mesh.primitives) {
-		for (auto const& [name, accessorIdx]: primitive.attributes) {
+	for (auto & primitive: mesh.primitives)
+	{
+		for (auto const & [name, accessorIdx]: primitive.attributes)
+		{
 			auto accessor = gltfModel_.accessors[accessorIdx];
 			auto bufferViewIdx = accessor.bufferView;
 			glBindBuffer(GL_ARRAY_BUFFER, vbos_[bufferViewIdx]);
 
 			int vaa;
-			if (name == "POSITION") vaa = 0;
-			else if (name == "NORMAL") vaa = 1;
-			else if (name == "TEXCOORD_0") vaa = 2;
-			else {
+			if (name == "POSITION")
+				vaa = 0;
+			else if (name == "NORMAL")
+				vaa = 1;
+			else if (name == "TEXCOORD_0")
+				vaa = 2;
+			else
+			{
 				qDebug() << "Attribute" << QString::fromStdString(name) << "was skipped in mesh" << meshIdx;
 				continue;
 			}
 
 			int size;
-			if (accessor.type == TINYGLTF_TYPE_SCALAR) {
+			if (accessor.type == TINYGLTF_TYPE_SCALAR)
+			{
 				size = 1;
-			} else if (accessor.type == TINYGLTF_TYPE_VEC2) {
+			}
+			else if (accessor.type == TINYGLTF_TYPE_VEC2)
+			{
 				size = 2;
-			} else if (accessor.type == TINYGLTF_TYPE_VEC3) {
+			}
+			else if (accessor.type == TINYGLTF_TYPE_VEC3)
+			{
 				size = 3;
-			} else if (accessor.type == TINYGLTF_TYPE_VEC4) {
+			}
+			else if (accessor.type == TINYGLTF_TYPE_VEC4)
+			{
 				size = 4;
-			} else {
+			}
+			else
+			{
 				qDebug() << "Unsupported accessor type: " << accessor.type;
 				throw std::runtime_error("Unsupported accessor type");
 			}
 
-			auto& bufferView = gltfModel_.bufferViews[bufferViewIdx];
+			auto & bufferView = gltfModel_.bufferViews[bufferViewIdx];
 			int byteStride = accessor.ByteStride(bufferView);
 
 			glEnableVertexAttribArray(vaa);
@@ -508,39 +546,44 @@ void Window::gltfBindMesh(int meshIdx)
 					 << "bufferView" << bufferViewIdx << "Offset" << bufferView.byteOffset
 					 << "Stride" << byteStride << "Component type" << accessor.componentType;
 		}
-
 	}
 }
 
 void Window::gltfRenderModel()
 {
-	const auto& scene = gltfModel_.scenes[gltfModel_.defaultScene];
-	for (auto& nodeIdx: scene.nodes) {
+	const auto & scene = gltfModel_.scenes[gltfModel_.defaultScene];
+	for (auto & nodeIdx: scene.nodes)
+	{
 		gltfRenderNode(nodeIdx);
 	}
 }
 
 void Window::gltfRenderNode(int nodeIdx)
 {
-	auto& node = gltfModel_.nodes[nodeIdx];
-	if ((node.mesh >= 0) && (node.mesh < gltfModel_.meshes.size())) {
+	auto & node = gltfModel_.nodes[nodeIdx];
+	if ((node.mesh >= 0) && (node.mesh < gltfModel_.meshes.size()))
+	{
 		gltfRenderMesh(node.mesh);
 	}
 
-	for (auto& childIdx: node.children) {
+	for (auto & childIdx: node.children)
+	{
 		gltfRenderNode(childIdx);
 	}
 }
 
 void Window::gltfRenderMesh(int meshIdx)
 {
-	auto& mesh = gltfModel_.meshes[meshIdx];
-	for (auto& primitive: mesh.primitives) {
-		auto& matrial = gltfModel_.materials[primitive.material];
+	auto & mesh = gltfModel_.meshes[meshIdx];
+	for (auto & primitive: mesh.primitives)
+	{
+		auto & matrial = gltfModel_.materials[primitive.material];
 
 		// Bind texture:
-		for (auto [name, value]: matrial.values) {
-			if (name == "baseColorTexture") {
+		for (auto [name, value]: matrial.values)
+		{
+			if (name == "baseColorTexture")
+			{
 				auto textureIdx = value.TextureIndex();
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, textures_[textureIdx]);
@@ -548,7 +591,7 @@ void Window::gltfRenderMesh(int meshIdx)
 			}
 		}
 
-		auto& accessor = gltfModel_.accessors[primitive.indices];
+		auto & accessor = gltfModel_.accessors[primitive.indices];
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos_[accessor.bufferView]);
 		glDrawElements(primitive.mode,
 					   accessor.count,

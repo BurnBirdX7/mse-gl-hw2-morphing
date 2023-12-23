@@ -6,17 +6,17 @@
 #include <Base/GLWidget.hpp>
 
 #include <QElapsedTimer>
+#include <QLabel>
 #include <QMatrix4x4>
 #include <QOpenGLBuffer>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLTexture>
 #include <QOpenGLVertexArrayObject>
-#include <QLabel>
 
+#include "tiny_gltf.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "tiny_gltf.h"
 
 #include "Camera.h"
 
@@ -28,16 +28,16 @@ public:
 	Window() noexcept;
 	~Window() override;
 
-public: // fgl::GLWidget
+public:// fgl::GLWidget
 	void onInit() override;
 	void onRender() override;
 	void onResize(size_t width, size_t height) override;
 
-public: // Controls
-	void mousePressEvent(QMouseEvent* got_event) override;
-	void mouseMoveEvent(QMouseEvent* got_event) override;
-	void mouseReleaseEvent(QMouseEvent* got_event) override;
-	void keyPressEvent(QKeyEvent* got_event) override;
+public:// Controls
+	void mousePressEvent(QMouseEvent * got_event) override;
+	void mouseMoveEvent(QMouseEvent * got_event) override;
+	void mouseReleaseEvent(QMouseEvent * got_event) override;
+	void keyPressEvent(QKeyEvent * got_event) override;
 
 signals:
 	void updateUI();
@@ -50,7 +50,8 @@ public slots:
 	void relativeUp(bool);
 
 private:
-	class PerfomanceMetricsGuard final {
+	class PerfomanceMetricsGuard final
+	{
 	public:
 		explicit PerfomanceMetricsGuard(std::function<void()> callback);
 		~PerfomanceMetricsGuard();
@@ -115,13 +116,13 @@ private:
 	// Cameras
 	FreeCamera freeCamera_{};
 	RotatingCamera rotatingCamera_{};
-	AbstractCamera* currentCamera_ = &rotatingCamera_;
-	QLabel* cameraStats_;
+	AbstractCamera * currentCamera_ = &rotatingCamera_;
+	QLabel * cameraStats_;
 
 	// Model
 	tinygltf::Model gltfModel_;
-	std::vector<GLuint> vbos_; // Index is index of bufferView
-	std::vector<GLuint> textures_; // Index is index of texture
+	std::vector<GLuint> vbos_;    // Index is index of bufferView
+	std::vector<GLuint> textures_;// Index is index of texture
 
 	// Uniform values
 	float morph_ = 0;
@@ -143,5 +144,4 @@ private:
 	// Controls tracking
 	QPoint mouseTrackStart_;
 	bool mouseTrack_ = false;
-
 };

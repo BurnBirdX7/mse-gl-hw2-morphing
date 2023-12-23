@@ -24,22 +24,25 @@ struct FreeCamera : AbstractCamera {
 	constexpr static float ROTATION_SPEED = 0.05f;
 	constexpr static float MOVEMENT_SPEED = 0.2f;
 
-	FreeCamera() {
-		updateRotation(0, 0); // Force front vector update
+	FreeCamera()
+	{
+		updateRotation(0, 0);// Force front vector update
 	}
 
-	inline void updatePosition(float deltaForward, float deltaRightward, float deltaUpward) final {
+	inline void updatePosition(float deltaForward, float deltaRightward, float deltaUpward) final
+	{
 		auto right = glm::normalize(glm::cross(front_, up_));
 		glm::vec3 realUp = relativeUp_ ? glm::normalize(glm::cross(right, front_)) : up_;
 		eye_ += ((deltaForward * front_) + (deltaRightward * right) + (deltaUpward * realUp)) * MOVEMENT_SPEED;
 	}
 
-	inline void updateRotation(float deltaYaw, float deltaPitch) final {
+	inline void updateRotation(float deltaYaw, float deltaPitch) final
+	{
 		yaw_ += deltaYaw * ROTATION_SPEED;
 		pitch_ += deltaPitch * ROTATION_SPEED * 2;
 
 		yaw_ = std::fmod(yaw_, 360.0f);
-		pitch_ = std::clamp(pitch_, -85.f, +85.f); // Limit pitch_ to avoid lock
+		pitch_ = std::clamp(pitch_, -85.f, +85.f);// Limit pitch_ to avoid lock
 
 		float cosYaw = glm::cos(glm::radians(yaw_));
 		float sinYaw = glm::sin(glm::radians(yaw_));
@@ -49,22 +52,27 @@ struct FreeCamera : AbstractCamera {
 		front_ = glm::normalize(glm::vec3(
 			cosYaw * cosPitch,
 			sinPitch,
-			sinYaw * cosPitch
-			));
+			sinYaw * cosPitch));
 	}
 
-	[[nodiscard]] inline glm::vec3 get_target() const {
+	[[nodiscard]] inline glm::vec3 get_target() const
+	{
 		return eye_ + front_;
 	}
 
-	[[nodiscard]] inline glm::mat4 getView() const override {
+	[[nodiscard]] inline glm::mat4 getView() const override
+	{
 		return glm::lookAt(eye_, get_target(), up_);
 	}
 
-	[[nodiscard]] QString getStats() const override {
+	[[nodiscard]] QString getStats() const override
+	{
 		return QString("Camera | position: (%1, %2, %3), yaw_: %4, pitch_: %5")
-			.arg(eye_.x).arg(eye_.y).arg(eye_.z)
-			.arg(yaw_).arg(pitch_);
+			.arg(eye_.x)
+			.arg(eye_.y)
+			.arg(eye_.z)
+			.arg(yaw_)
+			.arg(pitch_);
 	}
 };
 
@@ -74,18 +82,21 @@ struct RotatingCamera : AbstractCamera {
 	float phi_ = 0.0f;
 	glm::vec3 eye_ = {};
 
-	RotatingCamera() {
+	RotatingCamera()
+	{
 		updatePosition(0, 0, 0);
 	}
 
 	constexpr static float ROTATION_SPEED = 1.0f;
 	constexpr static float MOVEMENT_SPEED = 0.2f;
 
-	inline void updateRotation(float, float) final {
+	inline void updateRotation(float, float) final
+	{
 		// Ignore
 	}
 
-	inline void updatePosition(float deltaForward, float deltaRightward, float deltaUpward) final {
+	inline void updatePosition(float deltaForward, float deltaRightward, float deltaUpward) final
+	{
 		radius_ += deltaUpward * MOVEMENT_SPEED;
 		phi_ -= deltaRightward * ROTATION_SPEED;
 		theta_ -= deltaForward * ROTATION_SPEED;
@@ -93,20 +104,21 @@ struct RotatingCamera : AbstractCamera {
 		phi_ = std::fmod(phi_, 360.0f);
 		theta_ = std::clamp(theta_, 0.001f, 179.999f);
 
-		eye_ = radius_ * glm::vec3(
-				  glm::sin(glm::radians(theta_)) * glm::cos(glm::radians(phi_)),
-				  glm::cos(glm::radians(theta_)),
-				  glm::sin(glm::radians(theta_)) * glm::sin(glm::radians(phi_))
-			  );
+		eye_ = radius_ * glm::vec3(glm::sin(glm::radians(theta_)) * glm::cos(glm::radians(phi_)), glm::cos(glm::radians(theta_)), glm::sin(glm::radians(theta_)) * glm::sin(glm::radians(phi_)));
 	}
 
-	[[nodiscard]] inline glm::mat4 getView() const override {
+	[[nodiscard]] inline glm::mat4 getView() const override
+	{
 		return glm::lookAt(eye_, -glm::normalize(eye_), glm::vec3(0, 1, 0));
 	}
 
-	[[nodiscard]] QString getStats() const override {
+	[[nodiscard]] QString getStats() const override
+	{
 		return QString("Camera | position: (%1, %2, %3), phi_: %4, theta_: %5")
-			.arg(eye_.x).arg(eye_.y).arg(eye_.z)
-			.arg(phi_).arg(theta_);
+			.arg(eye_.x)
+			.arg(eye_.y)
+			.arg(eye_.z)
+			.arg(phi_)
+			.arg(theta_);
 	}
 };
