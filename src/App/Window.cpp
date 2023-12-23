@@ -17,7 +17,7 @@
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
-const QString MODEL_TO_LOAD = ":Models/Cube2.glb";
+const QString MODEL_TO_LOAD = ":Models/Duck2.glb";
 
 
 Window::Window() noexcept
@@ -86,7 +86,7 @@ void Window::onInit()
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	model_ = glm::rotate(glm::mat4(1), glm::radians(45.f), glm::vec3(0, 1, 0));
+	model_ = glm::rotate(glm::mat4(1), glm::radians(-45.f), glm::vec3(0, 1, 0));
 }
 
 void Window::onRender()
@@ -294,7 +294,7 @@ void Window::bind_node(int nodeIdx)
 		qDebug() << "Node" << nodeIdx << " -> Mesh" << node.mesh;
 		bind_mesh(node.mesh);
 	} else {
-		qDebug() << "Node" << nodeIdx << "has no valid mesh";
+		qDebug() << "Node" << nodeIdx << "has no valid mesh (" << node.mesh << ")";
 	}
 
 	for (auto& childIdx: node.children) {
@@ -362,7 +362,7 @@ void Window::render_model()
 void Window::render_node(int nodeIdx)
 {
 	auto& node = gltfModel_.nodes[nodeIdx];
-	if ((node.mesh >= 0) && (node.mesh <= gltfModel_.meshes.size())) {
+	if ((node.mesh >= 0) && (node.mesh < gltfModel_.meshes.size())) {
 		render_mesh(node.mesh);
 	}
 

@@ -39,8 +39,8 @@ void main() {
 	vec3 spotLightDirection = vec3(0, 1, -2);			// Direction
 
 	// Vertex:
-	vec4 vertex = vec4(mix(vertVertex, to_sphere(vertVertex), 1.0), 1.0);
-	vec3 normal = mix(vertNormal, normalize(vertVertex), 1.0);
+	vec4 vertex = vec4(mix(vertVertex, to_sphere(vertVertex), 0), 1.0);
+	vec3 normal = mix(vertNormal, normalize(vertVertex), 0);
 
 	// Output:
 	fragPos = vec3(modelMat * vertex); 	 				  // World position
