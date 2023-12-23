@@ -6,14 +6,15 @@
 
 ### Centered Camera
 
- * `A`/`D` - rotate camera around model
- * `W`/`S` - change camera pitch
- * `X`/`C` - zoom out / zoom in
+ * `A`/`D` - Rotate camera around model
+ * `W`/`S` - Change camera pitch_
+ * `X`/`C` - Zoom out / Zoom in
 
 ### Free Camera
- * `WASD` - Default movement
- * `X`/`C` - move up / down
- * Drag mouse to rotate camera
+ * `W`/`S` - Move forward / backward
+ * `A`/`D` - Move left / right
+ * `X`/`C` - Move up / down (By default moves along Y axis, but can be changed to be relative to the camera)
+ * Drag mouse to pitch_ and rotate camera
 
 **Keyboard layout matters!**
 

@@ -77,6 +77,7 @@ Window::Window() noexcept
 
 	connect(freecamCheckbox, &QCheckBox::stateChanged, this, &Window::changeCameraType);
 
+	/* CAMERA RELATIVE UP */
 	auto relativeUpCheckbox = new QCheckBox();
 	relativeUpCheckbox->setChecked(false);
 	relativeUpCheckbox->setEnabled(false);
@@ -85,11 +86,11 @@ Window::Window() noexcept
 	layout->addWidget(relativeUpCheckbox, 2);
 
 	connect(freecamCheckbox, &QCheckBox::stateChanged, relativeUpCheckbox, &QCheckBox::setEnabled);
-	connect(relativeUpCheckbox, &QCheckBox::stateChanged, this, &Window::realtiveUp);
+	connect(relativeUpCheckbox, &QCheckBox::stateChanged, this, &Window::relativeUp);
 
-	/* CAMERTA STATS */
+	/* CAMERA STATS */
 	cameraStats_ = new QLabel();
-	cameraStats_->setText(currentCamera_->get_stats());
+	cameraStats_->setText(currentCamera_->getStats());
 	layout->addWidget(cameraStats_);
 
 	/* misc */
@@ -118,8 +119,8 @@ void Window::onInit()
 	vao_.bind();
 
 	// Load and bind model
-	load_model();
-	bind_model();
+	gltfLoadModel();
+	gltfBindModel();
 
 	// Bind attributes
 	program_->bind();
@@ -169,7 +170,7 @@ void Window::onRender()
 	// Render
 	render();
 
-	cameraStats_->setText(currentCamera_->get_stats());
+	cameraStats_->setText(currentCamera_->getStats());
 
 	// Release VAO and shader program
 	vao_.release();
@@ -202,15 +203,113 @@ void Window::onResize(const size_t width, const size_t height)
 	projection_ = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }
 
+void Window::mousePressEvent(QMouseEvent* got_event)
+{
+	mouseTrack_ = true;
+	mouseTrackStart_ = got_event->pos();
+}
+void Window::mouseMoveEvent(QMouseEvent* got_event)
+{
+	if (!mouseTrack_) {
+		return;
+	}
+
+	auto pos = got_event->pos();
+	auto deltaX = mouseTrackStart_.x() - pos.x();
+	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
+	currentCamera_->updateRotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
+	mouseTrackStart_ = pos;
+	update();
+
+}
+void Window::mouseReleaseEvent(QMouseEvent* /* ignore */)
+{
+	mouseTrack_ = false;
+}
+
+void Window::keyPressEvent(QKeyEvent * got_event) {
+	auto key = (Qt::Key)got_event->key();
+
+	static std::map<Qt::Key, glm::vec3> keymap = {
+		{Qt::Key_W, {1, 0, 0}},
+		{Qt::Key_S, {-1, 0, 0}},
+		{Qt::Key_A, {0, 0, -1}},
+		{Qt::Key_D, {0, 0, 1}},
+		{Qt::Key_X, {0, 1, 0}},
+		{Qt::Key_C, {0, -1, 0}},
+	};
+
+	if (!keymap.contains(key)) {
+		qDebug() << "Map does not contain pressed key...." << key << got_event->text();
+		return;
+	}
+
+	auto delta = keymap[key];
+	currentCamera_->updatePosition(delta.x, delta.z, delta.y);
+
+	update();
+}
+
+void Window::changeCameraType(bool free)
+{
+	if (free) {
+		// Update eye_
+		freeCamera_.eye_ = rotatingCamera_.eye_;
+
+		// Update pitch_
+		freeCamera_.pitch_ = std::fabs( rotatingCamera_.theta_) - 90;
+
+		// Update yaw_
+		float sign = rotatingCamera_.phi_ > 0 ? 1 : -1;
+		freeCamera_.yaw_ = -sign * (180 - std::abs(rotatingCamera_.phi_));
+
+		// misc
+		freeCamera_.updateRotation(0, 0); // Force update front_ vec
+		currentCamera_ = &freeCamera_;
+	} else {
+		auto eye = freeCamera_.eye_;
+
+		auto len = glm::length(eye);
+		auto xz_len = glm::length(glm::vec2(eye.x, eye.z));
+
+		rotatingCamera_.radius_ = len;
+		rotatingCamera_.theta_ = glm::degrees(glm::acos(eye.y / len));
+		rotatingCamera_.phi_ = glm::degrees(glm::asin(eye.z / xz_len));
+
+		rotatingCamera_.updatePosition(0, 0, 0);
+		currentCamera_ = &rotatingCamera_;
+	}
+
+	qDebug() << "Free: pitch_" << freeCamera_.pitch_ << "yaw_" << freeCamera_.yaw_;
+	qDebug() << "Rot : Theta" << rotatingCamera_.theta_ << "Phi" << rotatingCamera_.phi_;
+
+	emit updateUI();
+}
+void Window::switchDiffuseLight(bool enable)
+{
+	enableDiffuse_ = enable;
+}
+
+void Window::switchSpotLight(bool enable)
+{
+	enableSpot_ = enable;
+}
+void Window::morph(int val)
+{
+	morph_ = static_cast<float>(val) / 100.f;
+}
+void Window::relativeUp(bool val)
+{
+	freeCamera_.relativeUp_ = val;
+}
+
 Window::PerfomanceMetricsGuard::PerfomanceMetricsGuard(std::function<void()> callback)
 	: callback_{ std::move(callback) }
-{
-}
+{}
 
 Window::PerfomanceMetricsGuard::~PerfomanceMetricsGuard()
 {
-	if (callback_)
-	{
+	if (callback_) {
 		callback_();
 	}
 }
@@ -229,7 +328,8 @@ auto Window::captureMetrics() -> PerfomanceMetricsGuard
 		}
 	};
 }
-void Window::load_model()
+
+void Window::gltfLoadModel()
 {
 	auto ctx = tinygltf::TinyGLTF();
 
@@ -259,22 +359,22 @@ void Window::load_model()
 	qDebug() << "Loaded GLTF";
 }
 
-void Window::bind_model()
+void Window::gltfBindModel()
 {
 	auto scene = gltfModel_.scenes[gltfModel_.defaultScene];
 	vbos_.resize(gltfModel_.bufferViews.size());
 
-	bind_buffers();
-	bind_textures();
+	gltfBindBuffers();
+	gltfBindTextures();
 
 	// Bind model's nodes
 	for (auto nodeIdx: scene.nodes) {
-		bind_node(nodeIdx);
+		gltfBindNode(nodeIdx);
 	}
 
 }
 
-void Window::bind_buffers() {
+void Window::gltfBindBuffers() {
 	// Generate VBOs and bind buffer views to them
 	for (size_t i = 0; i < gltfModel_.bufferViews.size(); ++i) {
 		auto& bufferView = gltfModel_.bufferViews[i];
@@ -302,7 +402,7 @@ void Window::bind_buffers() {
 	}
 }
 
-void Window::bind_textures()
+void Window::gltfBindTextures()
 {
 	textures_.resize(gltfModel_.textures.size());
 
@@ -345,25 +445,25 @@ void Window::bind_textures()
 	}
 }
 
-void Window::bind_node(int nodeIdx)
+void Window::gltfBindNode(int nodeIdx)
 {
 	auto& node = gltfModel_.nodes[nodeIdx];
 	auto qname = QString::fromStdString(node.name);
 	qDebug() << "Binding node" << nodeIdx << qname;
 	if ((node.mesh >= 0) && ((size_t)node.mesh < gltfModel_.meshes.size())) {
 		qDebug() << "Node" << nodeIdx << " -> Mesh" << node.mesh;
-		bind_mesh(node.mesh);
+		gltfBindMesh(node.mesh);
 	} else {
 		qDebug() << "Node" << nodeIdx << "has no valid mesh (" << node.mesh << ")";
 	}
 
 	for (auto& childIdx: node.children) {
 		qDebug() << "Node" << childIdx << " is a child of Node" << nodeIdx;
-		bind_node(childIdx);
+		gltfBindNode(childIdx);
 	}
 }
 
-void Window::bind_mesh(int meshIdx)
+void Window::gltfBindMesh(int meshIdx)
 {
 	auto& mesh = gltfModel_.meshes[meshIdx];
 	qDebug() << "Mesh" << meshIdx << QString::fromStdString(mesh.name);
@@ -412,25 +512,27 @@ void Window::bind_mesh(int meshIdx)
 	}
 }
 
-void Window::render_model()
+void Window::gltfRenderModel()
 {
 	const auto& scene = gltfModel_.scenes[gltfModel_.defaultScene];
 	for (auto& nodeIdx: scene.nodes) {
-		render_node(nodeIdx);
+		gltfRenderNode(nodeIdx);
 	}
 }
-void Window::render_node(int nodeIdx)
+
+void Window::gltfRenderNode(int nodeIdx)
 {
 	auto& node = gltfModel_.nodes[nodeIdx];
 	if ((node.mesh >= 0) && (node.mesh < gltfModel_.meshes.size())) {
-		render_mesh(node.mesh);
+		gltfRenderMesh(node.mesh);
 	}
 
 	for (auto& childIdx: node.children) {
-		render_node(childIdx);
+		gltfRenderNode(childIdx);
 	}
 }
-void Window::render_mesh(int meshIdx)
+
+void Window::gltfRenderMesh(int meshIdx)
 {
 	auto& mesh = gltfModel_.meshes[meshIdx];
 	for (auto& primitive: mesh.primitives) {
@@ -457,56 +559,11 @@ void Window::render_mesh(int meshIdx)
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 }
-void Window::mousePressEvent(QMouseEvent* got_event)
-{
-	mouseTrack_ = true;
-	mouseTrackStart_ = got_event->pos();
-}
-void Window::mouseMoveEvent(QMouseEvent* got_event)
-{
-	if (!mouseTrack_) {
-		return;
-	}
 
-	auto pos = got_event->pos();
-	auto deltaX = mouseTrackStart_.x() - pos.x();
-	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
-	currentCamera_->update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
-	mouseTrackStart_ = pos;
-	update();
-
-}
-void Window::mouseReleaseEvent(QMouseEvent* got_event)
-{
-	mouseTrack_ = false;
-}
-
-void Window::keyPressEvent(QKeyEvent * got_event) {
-	auto key = (Qt::Key)got_event->key();
-
-	static std::map<Qt::Key, glm::vec3> keymap = {
-		{Qt::Key_W, {1, 0, 0}},
-		{Qt::Key_S, {-1, 0, 0}},
-		{Qt::Key_A, {0, 0, -1}},
-		{Qt::Key_D, {0, 0, 1}},
-		{Qt::Key_X, {0, 1, 0}},
-		{Qt::Key_C, {0, -1, 0}},
-	};
-
-	if (!keymap.contains(key)) {
-		qDebug() << "Map does not contain pressed key...." << key << got_event->text();
-		return;
-	}
-
-	auto delta = keymap[key];
-	currentCamera_->update_position(delta.x, delta.z, delta.y);
-
-	update();
-}
 void Window::render()
 {
 	// Update view matrix
-	view_ = currentCamera_->get_view();
+	view_ = currentCamera_->getView();
 	const auto mvp = projection_ * view_ * model_;
 
 	// Update model matrix -- skip
@@ -523,57 +580,5 @@ void Window::render()
 	program_->setUniformValue(uniforms_.enableSpot, enableSpot_);
 
 	// Render model:
-	render_model();
-}
-void Window::changeCameraType(bool free)
-{
-	if (free) {
-		// Update eye
-		freeCamera_.eye = rotatingCamera_.eye;
-
-		// Update pitch
-		freeCamera_.pitch = std::fabs( rotatingCamera_.theta) - 90;
-
-		// Update yaw
-		float sign = rotatingCamera_.phi > 0 ? 1 : -1;
-		freeCamera_.yaw = -sign * (180 - std::abs(rotatingCamera_.phi));
-
-		// misc
-		freeCamera_.update_rotation(0, 0); // Force update front_ vec
-		currentCamera_ = &freeCamera_;
-	} else {
-		auto eye = freeCamera_.eye;
-
-		auto len = glm::length(eye);
-		auto xz_len = glm::length(glm::vec2(eye.x, eye.z));
-
-		rotatingCamera_.radius = len;
-		rotatingCamera_.theta = glm::degrees(glm::acos(eye.y / len));
-		rotatingCamera_.phi = glm::degrees(glm::asin(eye.z / xz_len));
-
-		rotatingCamera_.update_position(0, 0, 0);
-		currentCamera_ = &rotatingCamera_;
-	}
-
-	qDebug() << "Free: pitch" << freeCamera_.pitch << "yaw" << freeCamera_.yaw;
-	qDebug() << "Rot : Theta" << rotatingCamera_.theta << "Phi" << rotatingCamera_.phi;
-
-	emit updateUI();
-}
-void Window::switchDiffuseLight(bool enable)
-{
-	enableDiffuse_ = enable;
-}
-
-void Window::switchSpotLight(bool enable)
-{
-	enableSpot_ = enable;
-}
-void Window::morph(int val)
-{
-	morph_ = static_cast<float>(val) / 100.f;
-}
-void Window::realtiveUp(bool val)
-{
-	freeCamera_.relativeUp = val;
+	gltfRenderModel();
 }

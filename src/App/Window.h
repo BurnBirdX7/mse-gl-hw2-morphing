@@ -13,10 +13,10 @@
 #include <QOpenGLVertexArrayObject>
 #include <QLabel>
 
-#include "tiny_gltf.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "tiny_gltf.h"
 
 #include "Camera.h"
 
@@ -39,16 +39,18 @@ public: // Controls
 	void mouseReleaseEvent(QMouseEvent* got_event) override;
 	void keyPressEvent(QKeyEvent* got_event) override;
 
+signals:
+	void updateUI();
+
 public slots:
 	void changeCameraType(bool);
 	void switchDiffuseLight(bool);
 	void switchSpotLight(bool);
 	void morph(int);
-	void realtiveUp(bool);
+	void relativeUp(bool);
 
 private:
-	class PerfomanceMetricsGuard final
-	{
+	class PerfomanceMetricsGuard final {
 	public:
 		explicit PerfomanceMetricsGuard(std::function<void()> callback);
 		~PerfomanceMetricsGuard();
@@ -63,30 +65,33 @@ private:
 		std::function<void()> callback_;
 	};
 
-private:
 	[[nodiscard]] PerfomanceMetricsGuard captureMetrics();
 
-	void load_model();
+private:
+	/*  ~ GLTF Model Functions ~  */
+	// Load
 
-	void bind_model();
-	void bind_buffers();
-	void bind_textures();
-	void bind_node(int nodeIdx);
-	void bind_mesh(int meshIdx);
+	void gltfLoadModel();
+
+	// Bind
+
+	void gltfBindModel();
+	void gltfBindBuffers();
+	void gltfBindTextures();
+	void gltfBindNode(int nodeIdx);
+	void gltfBindMesh(int meshIdx);
+
+	// Render
+
+	void gltfRenderModel();
+	void gltfRenderNode(int nodeIdx);
+	void gltfRenderMesh(int meshIdx);
 
 	void render();
-	void render_model();
-	void render_node(int nodeIdx);
-	void render_mesh(int meshIdx);
-
-
-
-signals:
-	void updateUI();
 
 private:
+	/*  ~ OpenGL Data ~  */
 	struct {
-		// Matrices
 		GLint mvp = -1;
 		GLint model = -1;
 		GLint view = -1;
@@ -96,26 +101,16 @@ private:
 		GLint enableSpot = -1;
 	} uniforms_;
 
+	std::unique_ptr<QOpenGLShaderProgram> program_;
 	QOpenGLVertexArrayObject vao_;
 
+
+	/*  ~ Render Data ~  */
+
+	// Transformations
 	glm::mat4 model_;
 	glm::mat4 view_;
 	glm::mat4 projection_;
-
-	std::unique_ptr<QOpenGLShaderProgram> program_;
-
-	QElapsedTimer timer_;
-	size_t frameCount_ = 0;
-
-	struct {
-		size_t fps = 0;
-	} ui_;
-
-	bool animated_ = true;
-
-	// Controls tracking
-	QPoint mouseTrackStart_;
-	bool mouseTrack_ = false;
 
 	// Cameras
 	FreeCamera freeCamera_{};
@@ -128,10 +123,25 @@ private:
 	std::vector<GLuint> vbos_; // Index is index of bufferView
 	std::vector<GLuint> textures_; // Index is index of texture
 
-	// State control
+	// Uniform values
 	float morph_ = 0;
 	bool enableDiffuse_ = false;
 	bool enableSpot_ = false;
 	bool relativeUp_ = false;
+
+
+	/*  ~ Stats and Behaviour Tracking ~  */
+	QElapsedTimer timer_;
+	size_t frameCount_ = 0;
+
+	struct {
+		size_t fps = 0;
+	} ui_;
+
+	bool animated_ = true;
+
+	// Controls tracking
+	QPoint mouseTrackStart_;
+	bool mouseTrack_ = false;
 
 };
