@@ -46,7 +46,6 @@ Window::~Window()
 	{
 		// Free resources with context bounded.
 		const auto guard = bindContext();
-		texture_.reset();
 		program_.reset();
 	}
 }
@@ -66,11 +65,6 @@ void Window::onInit()
 	// Load and bind model
 	load_model();
 	bind_model();
-
-	// Load texture
-	texture_ = std::make_unique<QOpenGLTexture>(QImage(":/Textures/oxy.png"));
-	texture_->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
-	texture_->setWrapMode(QOpenGLTexture::WrapMode::Repeat);
 
 	// Bind attributes
 	program_->bind();
@@ -112,13 +106,12 @@ void Window::onRender()
 
 	// Activate texture unit and bind texture
 	glActiveTexture(GL_TEXTURE0);
-	texture_->bind();
 
 	// Render
 	render();
 
 	// Release VAO and shader program
-	texture_->release();
+//	texture_->release();
 	vao_.release();
 	program_->release();
 
@@ -251,7 +244,45 @@ void Window::bind_buffers() {
 
 void Window::bind_textures()
 {
-	// TODO: Bind textures
+	textures_.resize(gltfModel_.textures.size());
+
+	for (size_t i = 0; i < gltfModel_.textures.size(); ++i) {
+		auto& texture = gltfModel_.textures[i];
+		qDebug() << "Binding texture" << i << QString::fromStdString(texture.name);
+
+		if (texture.source < 0 || texture.source >= gltfModel_.images.size()) {
+			qDebug() << "Invalid source, skipping...";
+			continue;
+		}
+
+
+		auto& image = gltfModel_.images[texture.source];
+		auto bufferViewIdx = image.bufferView;
+		qDebug() << "Image" << texture.source << QString::fromStdString(image.name) << "with buffer view" << bufferViewIdx;
+
+
+		int format;
+		if (image.component == 4) {
+			format = GL_RGBA;
+		} else if (image.component == 3) {
+			format = GL_RGB;
+		} else {
+			qDebug() << "Unexpected component count" << image.component << "skipping...";
+			continue;
+		}
+
+		glGenTextures(1, &textures_[i]);
+		glBindTexture(GL_TEXTURE_2D, textures_[i]);
+
+		// Set texture parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image.width, image.height, 0, format, image.pixel_type, image.image.data());
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 }
 
 void Window::bind_node(int nodeIdx)
@@ -343,12 +374,27 @@ void Window::render_mesh(int meshIdx)
 {
 	auto& mesh = gltfModel_.meshes[meshIdx];
 	for (auto& primitive: mesh.primitives) {
+		auto& matrial = gltfModel_.materials[primitive.material];
+
+		// Bind texture:
+		for (auto [name, value]: matrial.values) {
+			if (name == "baseColorTexture") {
+				auto textureIdx = value.TextureIndex();
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, textures_[textureIdx]);
+				break;
+			}
+		}
+
 		auto& accessor = gltfModel_.accessors[primitive.indices];
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos_[accessor.bufferView]);
 		glDrawElements(primitive.mode,
 					   accessor.count,
 					   accessor.componentType,
 					   BUFFER_OFFSET(accessor.byteOffset));
+
+		// Unbind texture:
+		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 }
 void Window::mousePressEvent(QMouseEvent* got_event)

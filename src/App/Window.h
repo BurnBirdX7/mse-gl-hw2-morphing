@@ -91,7 +91,6 @@ private:
 	glm::mat4 view_;
 	glm::mat4 projection_;
 
-	std::unique_ptr<QOpenGLTexture> texture_;
 	std::unique_ptr<QOpenGLShaderProgram> program_;
 
 	QElapsedTimer timer_;
@@ -154,4 +153,5 @@ private:
 	// Model
 	tinygltf::Model gltfModel_;
 	std::vector<GLuint> vbos_; // Index is index of bufferView
+	std::vector<GLuint> textures_; // Index is index of texture
 };
