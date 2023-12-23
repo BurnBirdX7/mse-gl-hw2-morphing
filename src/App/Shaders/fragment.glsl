@@ -1,6 +1,8 @@
 #version 330 core
 
 uniform sampler2D tex_2d;
+uniform bool enableDiffuse;
+uniform bool enableSpot;
 
 in vec3 fragNormal;
 in vec2 fragTex;
@@ -19,7 +21,7 @@ vec4 get_spot() {
     return vec4(0);
 }
 
-vec4 get_directional() {
+vec4 get_diffuse() {
     const vec4 diffuseLightColor = vec4(1.0, 0.92, 0.5, 1.0); // RGBA Color
     const vec3 diffuseLightSource = vec3(3.0, 5.0, 1.0);      // Position in World space
     vec3 diffuseLightDirection = normalize(diffuseLightSource - fragPos);
@@ -36,9 +38,9 @@ void main() {
     // Constants:
 
     vec4 tex = texture(tex_2d, fragTex);
-    vec4 directional = get_directional();
-    vec4 spot = get_spot();
+    vec4 diffuse = enableDiffuse ? get_diffuse() : vec4(0);
+    vec4 spot = enableSpot ? get_spot() : vec4(0);
     vec4 ambient = get_ambient();
 
-    outColor = (ambient + directional + spot) * tex;
+    outColor = (ambient + diffuse + spot) * tex;
 }

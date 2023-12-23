@@ -1,8 +1,9 @@
 set(SRCS
-    main.cpp
-    Window.cpp
-    Window.h
-    resources.qrc
+        main.cpp
+        Window.cpp
+        Window.h
+        resources.qrc
+        Camera.h
 )
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)

@@ -13,6 +13,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
+#include <QCheckBox>
+#include <QSlider>
 #include <tinygltf/tiny_gltf.h>
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
@@ -22,6 +24,10 @@ const QString MODEL_TO_LOAD = ":Models/Duck2.glb";
 
 Window::Window() noexcept
 {
+	auto layout = new QVBoxLayout();
+	setLayout(layout);
+
+	/*  FPS  */
 	const auto formatFPS = [](const auto value) {
 		return QString("FPS: %1").arg(QString::number(value));
 	};
@@ -29,16 +35,50 @@ Window::Window() noexcept
 	auto fps = new QLabel(formatFPS(0), this);
 	fps->setStyleSheet("QLabel { color : white; }");
 
-	auto layout = new QVBoxLayout();
-	layout->addWidget(fps, 1);
-
-	setLayout(layout);
-
-	timer_.start();
-
 	connect(this, &Window::updateUI, [=] {
 		fps->setText(formatFPS(ui_.fps));
 	});
+
+	layout->addWidget(fps, 1);
+
+
+	/*  MORPH  */
+	auto morphLabel = new QLabel("Morph:");
+	auto morphSlider = new QSlider();
+	morphSlider->setRange(0, 100);
+	morphSlider->setSingleStep(1);
+	morphSlider->setOrientation(Qt::Horizontal);
+
+	layout->addWidget(morphLabel);
+	layout->addWidget(morphSlider);
+
+	connect(morphSlider, &QSlider::valueChanged, this, &Window::morph);
+
+	/*  LIGHT  */
+	auto diffuseCheckbox = new QCheckBox();
+	diffuseCheckbox->setChecked(false);
+	diffuseCheckbox->setText("Diffuse Light");
+	auto spotCheckbox = new QCheckBox();
+	spotCheckbox->setChecked(false);
+	spotCheckbox->setText("Spot Light");
+
+	layout->addWidget(diffuseCheckbox);
+	layout->addWidget(spotCheckbox);
+
+	connect(diffuseCheckbox, &QCheckBox::stateChanged, this, &Window::switchDiffuseLight);
+	connect(spotCheckbox, &QCheckBox::stateChanged, this, &Window::switchSpotLight);
+
+	/* CAMERA */
+	auto freecamCheckbox = new QCheckBox();
+	freecamCheckbox->setChecked(false);
+	freecamCheckbox->setText("Free Camera");
+
+	layout->addWidget(freecamCheckbox);
+
+	connect(freecamCheckbox, &QCheckBox::stateChanged, this, &Window::changeCameraType);
+
+	/* misc */
+	timer_.start();
 }
 
 Window::~Window()
@@ -73,6 +113,9 @@ void Window::onInit()
 	uniforms_.model = program_->uniformLocation("modelMat");
 	uniforms_.view = program_->uniformLocation("viewMat");
 	uniforms_.normal = program_->uniformLocation("normalMat");
+	uniforms_.morph = program_->uniformLocation("sphereMorph");
+	uniforms_.enableDiffuse = program_->uniformLocation("enableDiffuse");
+	uniforms_.enableSpot = program_->uniformLocation("enableSpot");
 
 	// Release all
 	program_->release();
@@ -139,7 +182,7 @@ void Window::onResize(const size_t width, const size_t height)
 	const auto aspect = static_cast<float>(width) / static_cast<float>(height);
 	const auto zNear = 0.1f;
 	const auto zFar = 100.0f;
-	const auto fov = Camera::fow;
+	const auto fov = 45.0f;
 	projection_ = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }
 
@@ -413,7 +456,7 @@ void Window::mouseMoveEvent(QMouseEvent* got_event)
 	auto deltaX = mouseTrackStart_.x() - pos.x();
 	auto deltaY = pos.y() - mouseTrackStart_.y(); // Inverted Y
 	mouseTrackStart_ = pos;
-	rotatingCamera_.update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
+	currentCamera_->update_rotation(static_cast<float>(deltaX), static_cast<float>(deltaY));
 	update();
 
 }
@@ -435,14 +478,14 @@ void Window::keyPressEvent(QKeyEvent * got_event) {
 	};
 
 	auto delta = keymap[(Qt::Key)key];
-	rotatingCamera_.update_position(delta.x, delta.z, delta.y);
+	currentCamera_->update_position(delta.x, delta.z, delta.y);
 
 	update();
 }
 void Window::render()
 {
 	// Update view matrix
-	view_ = rotatingCamera_.get_view();
+	view_ = currentCamera_->get_view();
 	const auto mvp = projection_ * view_ * model_;
 
 	// Update model matrix -- skip
@@ -454,7 +497,57 @@ void Window::render()
 	program_->setUniformValue(uniforms_.view, QMatrix4x4(glm::value_ptr(view_)).transposed());
 	program_->setUniformValue(uniforms_.normal, QMatrix4x4(glm::value_ptr(normalMat)));
 	program_->setUniformValue(uniforms_.mvp, QMatrix4x4(glm::value_ptr(mvp)).transposed());
+	program_->setUniformValue(uniforms_.morph, morph_);
+	program_->setUniformValue(uniforms_.enableDiffuse, enableDiffuse_);
+	program_->setUniformValue(uniforms_.enableSpot, enableSpot_);
 
 	// Render model:
 	render_model();
+}
+void Window::changeCameraType(bool free)
+{
+	if (free) {
+		// Update eye
+		freeCamera_.eye = rotatingCamera_.eye;
+
+		// Update pitch
+		freeCamera_.pitch = std::fabs( rotatingCamera_.theta) - 90;
+
+		// Update yaw
+		freeCamera_.yaw = -glm::sign(rotatingCamera_.phi) * (180 - std::abs(rotatingCamera_.phi));
+
+		// misc
+		freeCamera_.update_rotation(0, 0); // Force update front_ vec
+		currentCamera_ = &freeCamera_;
+	} else {
+		auto eye = freeCamera_.eye;
+
+		auto len = glm::length(eye);
+		auto xz_len = glm::length(glm::vec2(eye.x, eye.z));
+
+		rotatingCamera_.radius = len;
+		rotatingCamera_.theta = glm::degrees(glm::acos(eye.y / len));
+		rotatingCamera_.phi = glm::degrees(glm::asin(eye.z / xz_len));
+
+		rotatingCamera_.update_position(0, 0, 0);
+		currentCamera_ = &rotatingCamera_;
+	}
+
+	qDebug() << "Free: pitch" << freeCamera_.pitch << "yaw" << freeCamera_.yaw;
+	qDebug() << "Rot : Theta" << rotatingCamera_.theta << "Phi" << rotatingCamera_.phi;
+
+	emit updateUI();
+}
+void Window::switchDiffuseLight(bool enable)
+{
+	enableDiffuse_ = enable;
+}
+
+void Window::switchSpotLight(bool enable)
+{
+	enableSpot_ = enable;
+}
+void Window::morph(int val)
+{
+	morph_ = static_cast<float>(val) / 100.f;
 }

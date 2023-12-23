@@ -17,6 +17,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "Camera.h"
+
 
 class Window final : public fgl::GLWidget
 {
@@ -35,6 +37,12 @@ public: // Controls
 	void mouseMoveEvent(QMouseEvent* got_event) override;
 	void mouseReleaseEvent(QMouseEvent* got_event) override;
 	void keyPressEvent(QKeyEvent* got_event) override;
+
+public slots:
+	void changeCameraType(bool);
+	void switchDiffuseLight(bool);
+	void switchSpotLight(bool);
+	void morph(int);
 
 private:
 	class PerfomanceMetricsGuard final
@@ -64,8 +72,6 @@ private:
 	void bind_node(int nodeIdx);
 	void bind_mesh(int meshIdx);
 
-	void bind_vbo(int bufferViewIdx);
-
 	void render();
 	void render_model();
 	void render_node(int nodeIdx);
@@ -83,6 +89,9 @@ private:
 		GLint model = -1;
 		GLint view = -1;
 		GLint normal = -1;
+		GLint morph = -1;
+		GLint enableDiffuse = -1;
+		GLint enableSpot = -1;
 	} uniforms_;
 
 	QOpenGLVertexArrayObject vao_;
@@ -106,91 +115,19 @@ private:
 	QPoint mouseTrackStart_;
 	bool mouseTrack_ = false;
 
-	// Render params
-	struct Camera {
-		glm::vec3 eye = {0, 2, 7};
-		glm::vec3 up = {0, 1, 0};
-		glm::vec3 front = {0, 0, 0};
-
-		float yaw = -90.f;
-		float pitch = -13.6;
-		constexpr static float fow = 45.f;
-
-		constexpr static float rotationSpeed = 0.05f;
-		constexpr static float movementSpeed = 0.2f;
-
-		Camera() {
-			update_rotation(0, 0); // Force front vector update
-		}
-
-		inline void update_position(float deltaForward, float deltaRightward, float deltaUpward) {
-			auto right = glm::normalize(glm::cross(front, up));
-			eye += ((deltaForward * front) + (deltaRightward * right) + (deltaUpward * up)) * movementSpeed;
-		}
-
-		inline glm::vec3 get_target() const {
-			return eye + front;
-		}
-
-		inline void update_rotation(float deltaYaw, float deltaPitch) {
-			yaw += deltaYaw * rotationSpeed;
-			pitch += deltaPitch * rotationSpeed;
-			pitch = std::clamp(pitch, -89.f, +89.f); // Limit pitch to avoid lock
-
-			front = glm::normalize(glm::vec3(
-				cos(glm::radians(yaw) * cos(glm::radians(pitch))), // x = cos(yaw) * cos(pitch)
-				sin(glm::radians(pitch)),									   // y = sin(pitch)
-				sin(glm::radians(yaw) * cos(glm::radians(pitch)))  // z = sin(yaw) * cos(pitch)
-			));
-		}
-
-		[[nodiscard]] inline glm::mat4 get_view() const {
-			return glm::lookAt(eye, get_target(), up);
-		}
-
-	} camera_;
-
-	struct RotatingCamera {
-		float radius = 7.0f;
-		float theta = 45.0f;
-		float phi = 60.0f;
-		glm::vec3 eye{};
-
-		RotatingCamera() {
-			update_position(0, 0, 0);
-		}
-
-		constexpr static float rotationSpeed = 1.0f;
-		constexpr static float movementSpeed = 0.2f;
-
-		inline void update_rotation(float, float) {
-			// Ignore
-		}
-
-		inline void update_position(float deltaForward, float deltaRightward, float deltaUpward) {
-			radius += deltaUpward * movementSpeed;
-			phi -= deltaRightward * rotationSpeed;
-			theta -= deltaForward * rotationSpeed;
-			theta = std::clamp(theta, 0.001f, 179.999f);
-
-			eye = radius * glm::vec3(
-				glm::sin(glm::radians(theta)) * glm::cos(glm::radians(phi)),
-				glm::cos(glm::radians(theta)),
-			    glm::sin(glm::radians(theta)) * glm::sin(glm::radians(phi))
-			);
-
-			qDebug() << "Phi:" << phi << "Theta:" << theta;
-		}
-
-
-		[[nodiscard]] inline glm::mat4 get_view() const {
-			return glm::lookAt(eye, -glm::normalize(eye), glm::vec3(0, 1, 0));
-		}
-
-	} rotatingCamera_;
+	// Cameras
+	FreeCamera freeCamera_{};
+	RotatingCamera rotatingCamera_{};
+	AbstractCamera* currentCamera_ = &rotatingCamera_;
 
 	// Model
 	tinygltf::Model gltfModel_;
 	std::vector<GLuint> vbos_; // Index is index of bufferView
 	std::vector<GLuint> textures_; // Index is index of texture
+
+	// State control
+	float morph_ = 0;
+	bool enableDiffuse_ = false;
+	bool enableSpot_ = false;
+
 };
