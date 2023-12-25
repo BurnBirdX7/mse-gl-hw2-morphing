@@ -29,4 +29,4 @@ Doesn't work, because I don't know why
 
 Fox.glb but with animations, rig and root node removed, and model (not mesh) scaled down.
 Also changed center of coordinates for meshes.
-Full-scale model was properly displayed, but wasn't easy to observe, so I also scaled it down.
+Full-scale model was properly displayed, but wasn't easy to observe, so I scaled it down.
