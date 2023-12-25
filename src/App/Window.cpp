@@ -14,12 +14,13 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include <QCheckBox>
+#include <QPushButton>
 #include <QSlider>
 #include <tinygltf/tiny_gltf.h>
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
-const QString MODEL_TO_LOAD = ":Models/Duck2.glb";
+const QString MODEL_TO_LOAD = ":Models/Duck.glb";
 
 
 Window::Window() noexcept
@@ -43,55 +44,93 @@ Window::Window() noexcept
 
 
 	/*  MORPH  */
+	auto morphLayout = new QHBoxLayout();
 	auto morphLabel = new QLabel("Morph:");
 	auto morphSlider = new QSlider();
 	morphSlider->setRange(0, 100);
 	morphSlider->setSingleStep(1);
 	morphSlider->setOrientation(Qt::Horizontal);
 
-	layout->addWidget(morphLabel);
-	layout->addWidget(morphSlider);
+	morphLayout->addWidget(morphLabel);
+	morphLayout->addWidget(morphSlider);
+	layout->addLayout(morphLayout);
 
 	connect(morphSlider, &QSlider::valueChanged, this, &Window::morph);
 
-	/*  LIGHT  */
-	auto diffuseCheckbox = new QCheckBox();
-	diffuseCheckbox->setChecked(false);
-	diffuseCheckbox->setText("Diffuse Light");
-	auto spotCheckbox = new QCheckBox();
-	spotCheckbox->setChecked(false);
-	spotCheckbox->setText("Spot Light");
-
-	layout->addWidget(diffuseCheckbox);
-	layout->addWidget(spotCheckbox);
-
-	connect(diffuseCheckbox, &QCheckBox::stateChanged, this, &Window::switchDiffuseLight);
-	connect(spotCheckbox, &QCheckBox::stateChanged, this, &Window::switchSpotLight);
-
-	/* CAMERA */
+	/*  CAMERA  */
+	auto cameraLayout = new QHBoxLayout();
 	auto freecamCheckbox = new QCheckBox();
 	freecamCheckbox->setChecked(false);
 	freecamCheckbox->setText("Free Camera");
 
-	layout->addWidget(freecamCheckbox, 1);
+	cameraLayout->addWidget(freecamCheckbox, 1);
 
 	connect(freecamCheckbox, &QCheckBox::stateChanged, this, &Window::changeCameraType);
 
-	/* CAMERA RELATIVE UP */
+	/*  CAMERA RELATIVE UP  */
 	auto relativeUpCheckbox = new QCheckBox();
 	relativeUpCheckbox->setChecked(false);
 	relativeUpCheckbox->setEnabled(false);
 	relativeUpCheckbox->setText("Use relative up");
 
-	layout->addWidget(relativeUpCheckbox, 2);
+	cameraLayout->addWidget(relativeUpCheckbox, 2);
 
 	connect(freecamCheckbox, &QCheckBox::stateChanged, relativeUpCheckbox, &QCheckBox::setEnabled);
 	connect(relativeUpCheckbox, &QCheckBox::stateChanged, this, &Window::relativeUp);
 
-	/* CAMERA STATS */
+
+	/*  CAMERA STATS  */
 	cameraStats_ = new QLabel();
 	cameraStats_->setText(currentCamera_->getStats());
-	layout->addWidget(cameraStats_);
+	cameraLayout->addWidget(cameraStats_);
+
+	layout->addLayout(cameraLayout);
+
+	/* DIFFUSE LIGHT  */
+	auto diffuseCheckbox = new QCheckBox();
+	diffuseCheckbox->setChecked(false);
+	diffuseCheckbox->setText("Diffuse Light");
+
+	layout->addWidget(diffuseCheckbox);
+
+	connect(diffuseCheckbox, &QCheckBox::stateChanged, this, &Window::switchDiffuseLight);
+
+	/* SPOTLIGHT */
+	auto spotLayout = new QHBoxLayout();
+	auto spotCheckbox = new QCheckBox();
+	spotCheckbox->setChecked(false);
+	spotCheckbox->setText("Spot Light");
+
+	spotLayout->addWidget(spotCheckbox);
+
+	connect(spotCheckbox, &QCheckBox::stateChanged, this, &Window::switchSpotLight);
+
+	/*  SPOTLIGHT ANGLE  */
+	auto spotAngleLabel = new QLabel("Angle:");
+	auto spotAngleSlider = new QSlider();
+	spotAngleSlider->setRange(1, 60);
+	spotAngleSlider->setValue(static_cast<int>(spotlightAngle_));
+	spotAngleSlider->setSingleStep(1);
+	spotAngleSlider->setEnabled(false);
+	spotAngleSlider->setOrientation(Qt::Horizontal);
+
+	spotLayout->addWidget(spotAngleLabel);
+	spotLayout->addWidget(spotAngleSlider);
+
+	connect(spotCheckbox, &QCheckBox::stateChanged, spotAngleSlider, &QSlider::setEnabled);
+	connect(spotAngleSlider, &QSlider::valueChanged, this, &Window::spotlightAngle);
+
+	/*  SPOTLIGHT POSITION  */
+	auto spotPositionButton = new QPushButton();
+	spotPositionButton->setText("Point spotlight from camera");
+	spotPositionButton->setEnabled(false);
+
+	spotLayout->addWidget(spotPositionButton);
+
+	connect(spotCheckbox, &QCheckBox::stateChanged, spotPositionButton, &QPushButton::setEnabled);
+	connect(spotPositionButton, &QPushButton::clicked, this, &Window::spotLightUpdate);
+
+	layout->addLayout(spotLayout);
 
 	/* misc */
 	timer_.start();
@@ -125,13 +164,20 @@ void Window::onInit()
 	// Bind attributes
 	program_->bind();
 
+	// Uniform matrices:
 	uniforms_.mvp = program_->uniformLocation("mvp");
 	uniforms_.model = program_->uniformLocation("modelMat");
 	uniforms_.view = program_->uniformLocation("viewMat");
 	uniforms_.normal = program_->uniformLocation("normalMat");
+
+	// Uniform params:
 	uniforms_.morph = program_->uniformLocation("sphereMorph");
+
 	uniforms_.enableDiffuse = program_->uniformLocation("enableDiffuse");
 	uniforms_.enableSpot = program_->uniformLocation("enableSpot");
+	uniforms_.spotlightAngle = program_->uniformLocation("spotLightAngle");
+	uniforms_.spotlightSource = program_->uniformLocation("spotLightSource");
+	uniforms_.spotlightDirection = program_->uniformLocation("spotLightDirection");
 
 	// Release all
 	program_->release();
@@ -144,9 +190,6 @@ void Window::onInit()
 
 	// Clear all FBO buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	//	model_ = glm::rotate(glm::mat4(1), glm::radians(-45.f), glm::vec3(0, 1, 0));
-	model_ = glm::mat4(1);
 }
 
 void Window::onRender()
@@ -259,37 +302,20 @@ void Window::changeCameraType(bool free)
 {
 	if (free)
 	{
-		// Update eye_
 		freeCamera_.eye_ = rotatingCamera_.eye_;
-
-		// Update pitch_
-		freeCamera_.pitch_ = std::fabs(rotatingCamera_.theta_) - 90;
-
-		// Update yaw_
-		float sign = rotatingCamera_.phi_ > 0 ? 1 : -1;
-		freeCamera_.yaw_ = -sign * (180 - std::abs(rotatingCamera_.phi_));
-
-		// misc
+		freeCamera_.yaw_ = rotatingCamera_.getYaw();
+		freeCamera_.pitch_ = rotatingCamera_.getPitch();
 		freeCamera_.updateRotation(0, 0);// Force update front_ vec
 		currentCamera_ = &freeCamera_;
 	}
 	else
 	{
-		auto eye = freeCamera_.eye_;
-
-		auto len = glm::length(eye);
-		auto xz_len = glm::length(glm::vec2(eye.x, eye.z));
-
-		rotatingCamera_.radius_ = len;
-		rotatingCamera_.theta_ = glm::degrees(glm::acos(eye.y / len));
-		rotatingCamera_.phi_ = glm::degrees(glm::asin(eye.z / xz_len));
-
+		rotatingCamera_.radius_ = freeCamera_.getRadius();
+		rotatingCamera_.theta_ = freeCamera_.getTheta();
+		rotatingCamera_.phi_ = freeCamera_.getPhi();
 		rotatingCamera_.updatePosition(0, 0, 0);
 		currentCamera_ = &rotatingCamera_;
 	}
-
-	qDebug() << "Free: pitch_" << freeCamera_.pitch_ << "yaw_" << freeCamera_.yaw_;
-	qDebug() << "Rot : Theta" << rotatingCamera_.theta_ << "Phi" << rotatingCamera_.phi_;
 
 	emit updateUI();
 }
@@ -309,6 +335,28 @@ void Window::morph(int val)
 void Window::relativeUp(bool val)
 {
 	freeCamera_.relativeUp_ = val;
+}
+
+void Window::spotlightAngle(int angle)
+{
+	spotlightAngle_ = static_cast<float>(angle);
+
+	emit updateUI();
+}
+
+void Window::spotLightUpdate()
+{
+	if (currentCamera_ == &rotatingCamera_) {
+		// Update free camera
+		freeCamera_.eye_ = rotatingCamera_.eye_;
+		freeCamera_.yaw_ = rotatingCamera_.getYaw();
+		freeCamera_.pitch_ = rotatingCamera_.getPitch();
+		freeCamera_.updateRotation(0, 0); // Force front update
+	}
+
+	spotlightPosition_ = freeCamera_.eye_;
+	spotLightDirection_ = spotlightPosition_ + freeCamera_.front_;
+	emit updateUI();
 }
 
 Window::PerfomanceMetricsGuard::PerfomanceMetricsGuard(std::function<void()> callback)
@@ -554,26 +602,48 @@ void Window::gltfRenderModel()
 	const auto & scene = gltfModel_.scenes[gltfModel_.defaultScene];
 	for (auto & nodeIdx: scene.nodes)
 	{
-		gltfRenderNode(nodeIdx);
+		gltfRenderNode(nodeIdx, glm::mat4(1));
 	}
 }
 
-void Window::gltfRenderNode(int nodeIdx)
+void Window::gltfRenderNode(int nodeIdx, glm::mat4 const& parentModelMat)
 {
 	auto & node = gltfModel_.nodes[nodeIdx];
+
+	glm::dmat4 modelMat = parentModelMat;
+	if (node.matrix.size() == 16) {
+		modelMat = modelMat * glm::make_mat4(node.matrix.data());
+	} else {
+		if (node.translation.size() == 3) {
+			modelMat = modelMat * glm::translate(modelMat, glm::make_vec3(node.translation.data()));
+		}
+		if (node.rotation.size() == 4) {
+			modelMat = modelMat * glm::mat4_cast(glm::make_quat(node.rotation.data()));
+		}
+		if (node.scale.size() == 3) {
+			modelMat = modelMat * glm::scale(modelMat, glm::make_vec3(node.scale.data()));
+		}
+	}
+
 	if ((node.mesh >= 0) && (node.mesh < gltfModel_.meshes.size()))
 	{
-		gltfRenderMesh(node.mesh);
+		gltfRenderMesh(node.mesh, modelMat);
 	}
 
 	for (auto & childIdx: node.children)
 	{
-		gltfRenderNode(childIdx);
+		gltfRenderNode(childIdx, modelMat);
 	}
 }
 
-void Window::gltfRenderMesh(int meshIdx)
+void Window::gltfRenderMesh(int meshIdx, glm::mat4 const& parentModelMat)
 {
+	auto mvp = projection_ * view_ * parentModelMat;
+	auto normal = glm::inverse(parentModelMat);
+	program_->setUniformValue(uniforms_.mvp, QMatrix4x4(glm::value_ptr(mvp)).transposed());
+	program_->setUniformValue(uniforms_.model, QMatrix4x4(glm::value_ptr(parentModelMat)).transposed());
+	program_->setUniformValue(uniforms_.normal, QMatrix4x4(glm::value_ptr(normal)));
+
 	auto & mesh = gltfModel_.meshes[meshIdx];
 	for (auto & primitive: mesh.primitives)
 	{
@@ -607,21 +677,17 @@ void Window::render()
 {
 	// Update view matrix
 	view_ = currentCamera_->getView();
-	const auto mvp = projection_ * view_ * model_;
-
-	// Update model matrix -- skip
-	// Update normal matrix:
-	auto normalMat = glm::inverse(model_);
 
 	// Set uniforms:
-	program_->setUniformValue(uniforms_.model, QMatrix4x4(glm::value_ptr(model_)).transposed());
 	program_->setUniformValue(uniforms_.view, QMatrix4x4(glm::value_ptr(view_)).transposed());
-	program_->setUniformValue(uniforms_.normal, QMatrix4x4(glm::value_ptr(normalMat)));
-	program_->setUniformValue(uniforms_.mvp, QMatrix4x4(glm::value_ptr(mvp)).transposed());
 	program_->setUniformValue(uniforms_.morph, morph_);
 	program_->setUniformValue(uniforms_.enableDiffuse, enableDiffuse_);
 	program_->setUniformValue(uniforms_.enableSpot, enableSpot_);
+	program_->setUniformValue(uniforms_.spotlightAngle, spotlightAngle_);
+	program_->setUniformValue(uniforms_.spotlightSource, QVector3D(spotlightPosition_.x, spotlightPosition_.y, spotlightPosition_.z));
+	program_->setUniformValue(uniforms_.spotlightDirection, QVector3D(spotLightDirection_.x, spotLightDirection_.y, spotLightDirection_.z));
 
 	// Render model:
 	gltfRenderModel();
 }
+

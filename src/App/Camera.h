@@ -74,6 +74,19 @@ struct FreeCamera : AbstractCamera {
 			.arg(yaw_)
 			.arg(pitch_);
 	}
+
+	[[nodiscard]] float getRadius() const {
+		return glm::length(eye_);
+	}
+
+	[[nodiscard]] float getTheta() const {
+		return glm::degrees(glm::acos(eye_.y / getRadius()));
+	}
+
+	[[nodiscard]] float getPhi() const {
+		auto xz_len = glm::length(glm::vec2(eye_.x, eye_.z));
+		return glm::degrees(glm::asin(eye_.z / xz_len));
+	}
 };
 
 struct RotatingCamera : AbstractCamera {
@@ -101,6 +114,7 @@ struct RotatingCamera : AbstractCamera {
 		phi_ -= deltaRightward * ROTATION_SPEED;
 		theta_ -= deltaForward * ROTATION_SPEED;
 
+		radius_ = std::max(0.0f, radius_);
 		phi_ = std::fmod(phi_, 360.0f);
 		theta_ = std::clamp(theta_, 0.001f, 179.999f);
 
@@ -120,5 +134,14 @@ struct RotatingCamera : AbstractCamera {
 			.arg(eye_.z)
 			.arg(phi_)
 			.arg(theta_);
+	}
+
+	[[nodiscard]] float getPitch() const {
+		return std::fabs(theta_) - 90;
+	}
+
+	[[nodiscard]] float getYaw() const {
+		float sign = phi_ > 0 ? 1 : -1;
+		return -sign * (180 - std::abs(phi_));
 	}
 };

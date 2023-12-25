@@ -48,6 +48,8 @@ public slots:
 	void switchSpotLight(bool);
 	void morph(int);
 	void relativeUp(bool);
+	void spotlightAngle(int);
+	void spotLightUpdate();
 
 private:
 	class PerfomanceMetricsGuard final
@@ -85,8 +87,8 @@ private:
 	// Render
 
 	void gltfRenderModel();
-	void gltfRenderNode(int nodeIdx);
-	void gltfRenderMesh(int meshIdx);
+	void gltfRenderNode(int nodeIdx, glm::mat4 const& parentModelMat);
+	void gltfRenderMesh(int meshIdx, glm::mat4 const& parentModelMat);
 
 	void render();
 
@@ -100,6 +102,9 @@ private:
 		GLint morph = -1;
 		GLint enableDiffuse = -1;
 		GLint enableSpot = -1;
+		GLint spotlightAngle = -1;
+		GLint spotlightSource = -1;
+		GLint spotlightDirection = -1;
 	} uniforms_;
 
 	std::unique_ptr<QOpenGLShaderProgram> program_;
@@ -109,7 +114,6 @@ private:
 	/*  ~ Render Data ~  */
 
 	// Transformations
-	glm::mat4 model_;
 	glm::mat4 view_;
 	glm::mat4 projection_;
 
@@ -128,7 +132,9 @@ private:
 	float morph_ = 0;
 	bool enableDiffuse_ = false;
 	bool enableSpot_ = false;
-	bool relativeUp_ = false;
+	float spotlightAngle_ = 20;
+	glm::vec3 spotlightPosition_ = glm::vec3(0.0, 5.0, 3.0);
+	glm::vec3 spotLightDirection_ = glm::vec3(0, 1, -2);
 
 
 	/*  ~ Stats and Behaviour Tracking ~  */

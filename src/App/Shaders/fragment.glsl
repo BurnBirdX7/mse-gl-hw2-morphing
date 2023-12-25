@@ -3,6 +3,7 @@
 uniform sampler2D tex_2d;
 uniform bool enableDiffuse;
 uniform bool enableSpot;
+uniform float spotLightAngle;
 
 in vec3 fragNormal;
 in vec2 fragTex;
@@ -15,7 +16,7 @@ out vec4 outColor;
 vec4 get_spot() {
     const vec4 spotLightColor = vec4(0.6, 0.6, 0.9, 1); // RGBA color
     float cos = dot(normalize(fragSpotLightRelativePosition), fragSpotLightDirection);
-    if (cos > 0 && acos(cos) < radians(20.0)) {
+    if (cos > 0 && acos(cos) < radians(spotLightAngle)) {
         return spotLightColor;
     }
     return vec4(0);
