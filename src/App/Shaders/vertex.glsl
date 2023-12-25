@@ -22,9 +22,18 @@ out vec3 fragPos;					    // World space
 out vec3 fragSpotLightDirection;	    // View space
 out vec3 fragSpotLightRelativePosition; // View space
 
+float get_scale() {
+	vec3 scaleFactors = vec3(
+		length(modelMat[0].xyz),
+		length(modelMat[1].xyz),
+		length(modelMat[2].xyz)
+	);
+	return 1 / max(max(scaleFactors.x, scaleFactors.y), scaleFactors.z);
+}
+
 void main() {
 	// Vertex:
-	vec4 vertex = vec4(mix(vertVertex, normalize(vertVertex), sphereMorph), 1.0);
+	vec4 vertex = vec4(mix(vertVertex, get_scale() * normalize(vertVertex), sphereMorph), 1.0);
 	vec3 normal = mix(vertNormal, normalize(vertVertex), sphereMorph);
 
 	// Output:
