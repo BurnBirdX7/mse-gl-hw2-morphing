@@ -20,7 +20,7 @@
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
-const QString MODEL_TO_LOAD = ":Models/Duck.glb";
+const QString MODEL_TO_LOAD = ":Models/Duck2.glb";
 
 
 Window::Window() noexcept

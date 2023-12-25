@@ -4,6 +4,7 @@
         <file>Models/Cube3.glb</file>
         <file>Models/Duck.glb</file>
         <file>Models/Duck2.glb</file>
+        <file>Models/Fox2.glb</file>
     </qresource>
     <qresource prefix="/">
         <file>Textures/voronoi.png</file>
